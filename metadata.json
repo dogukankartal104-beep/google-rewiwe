@@ -1,0 +1,8 @@
+{
+  "name": "NFC Card CRM",
+  "description": "NFC Google Review kartları için müşteri, ödeme ve WhatsApp entegrasyonlu takip paneli.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

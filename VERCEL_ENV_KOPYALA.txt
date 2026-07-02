@@ -1,0 +1,61 @@
+====================================================
+ADIM ADIM KURULUM — SIFIRDAN
+====================================================
+
+--- ADIM 1: GITHUB'A GONDER ---
+Bu zip'i masaustunde nfc-crm adiyla ac.
+PowerShell'de:
+
+cd Desktop\nfc-crm
+Remove-Item -Recurse -Force .git -ErrorAction SilentlyContinue
+git init -b main
+git add .
+git commit -m "temiz baslangic"
+git remote add origin https://github.com/dogukankartal104-beep/google-rewiwe.git
+git push -u origin main --force
+
+--- ADIM 2: VERCEL'DE YENI PROJE ---
+1. vercel.com/new adresine git
+2. google-rewiwe reposunu bul, Import'a bas
+3. Framework Preset: Vite (otomatik algilanir, dokunma)
+4. "Environment Variables" bolumunu ac, asagidaki 5 degiskeni
+   TEK TEK gir (her birini Key kutusuna isim, Value kutusuna deger yazarak ekle):
+
+KEY: VITE_SUPABASE_URL
+VALUE: https://isjpzdzvymrqulxrhcgo.supabase.co
+
+KEY: VITE_SUPABASE_ANON_KEY
+VALUE: sb_publishable_98ffaKR4DqemO_LIFn1XXA_g8kpabGV
+
+KEY: SUPABASE_SERVICE_ROLE_KEY
+VALUE: sb_secret_ULQlPhCQMhmyRSh12tLx7g_hAo3E94w
+
+KEY: SHOPIER_OSB_USERNAME
+VALUE: 228a34051ad6b2cc8315dd8919138385
+
+KEY: SHOPIER_OSB_PASSWORD
+VALUE: 0b5e85319725092feae74aa5e5d26da7
+
+5. Deploy butonuna bas, ~1 dakika bekle, "Ready" yazana kadar.
+
+--- ADIM 3: DOGRULAMA ---
+Deploy bitince Vercel sana bir adres verecek, ornegin:
+https://google-rewiwe-xxxx.vercel.app
+
+Bu adresi tarayicida ac, siteyi gormelisin (login ekrani).
+Sonra sunu dene:
+https://google-rewiwe-xxxx.vercel.app/api/webhook/shopier
+{"error":"Method not allowed"} gormelisin — bu normaldir, endpoint calisiyor demektir.
+
+--- ADIM 4: SHOPIER OSB AYARI ---
+Shopier panel > Ayarlar > Entegrasyonlar > Otomatik Siparis Bildirimi
+PROTOKOL: https://
+BILDIRIM URL: google-rewiwe-xxxx.vercel.app/api/webhook/shopier
+(xxxx yerine gercek adresini yaz, https:// yazma cunku protokolu ayri sectin)
+Kaydet > Bildirim Testi sekmesine gec > gercek bir siparis numarasi gir > Test'e bas
+
+--- SORUN OLURSA ---
+Vercel > projen > Logs sekmesine git, Shopier'de tekrar test yaptiginda
+orada yeni bir log satiri cikar. O satirin icerigini kopyalayip
+Claude'a yapistir, birlikte cozeriz.
+====================================================
