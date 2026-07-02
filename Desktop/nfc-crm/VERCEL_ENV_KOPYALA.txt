@@ -1,0 +1,15 @@
+# === VERCEL ENVIRONMENT VARIABLES ===
+# Bunları Vercel Dashboard > Project Settings > Environment Variables içine
+# tek tek ekle (Production + Preview + Development hepsini işaretle)
+
+VITE_SUPABASE_URL=https://isjpzdzvymrqulxrhcgo.supabase.co
+VITE_SUPABASE_ANON_KEY=sb_publishable_98ffaKR4DqemO_LIFn1XXA_g8kpabGV
+SUPABASE_SERVICE_ROLE_KEY=sb_secret_ULQlPhCQMhmyRSh12tLx7g_hAo3E94w
+
+# Shopier Otomatik Sipariş Bildirimi (OSB) - panelden verdiğin bilgiler:
+SHOPIER_OSB_USERNAME=228a34051ad6b2cc8315dd8919138385
+SHOPIER_OSB_PASSWORD=0b5e85319725092feae74aa5e5d26da7
+
+# Not: developer.shopier.com/reference/webhooks sayfasındaki JWT tabanlı
+# modern webhook sistemi DEĞİL, OSB (legacy) kullanılıyor - Shopier'in kendi
+# panelinde sana verdiği seçenek bu. JWT token'a şimdilik gerek yok.
