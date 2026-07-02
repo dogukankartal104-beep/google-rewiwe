@@ -7,6 +7,7 @@ import { ClientModal } from './components/ClientModal';
 import { SettingsModal } from './components/SettingsModal';
 import { CustomerPortal } from './components/CustomerPortal';
 import { CardManager } from './components/CardManager';
+import { CustomerDashboard } from './components/CustomerDashboard';
 import { CardRedirect } from './components/CardRedirect';
 import { Login } from './components/Login';
 import { PaymentCalendar } from './components/PaymentCalendar';
