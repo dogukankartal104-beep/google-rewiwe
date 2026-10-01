@@ -100,3 +100,14 @@ def test_engine_paper_flow():
     assert "ORG" not in eng.positions
     assert store.db.execute("SELECT exit_reason FROM paper_trades").fetchone()[0] == "stop"
     asyncio.run(eng._evaluate("ORG", T0 + 120))  # fonlama store'dan, hata vermemeli
+
+
+def test_engine_prunes_idle_tokens():
+    eng = Engine(Config(), Store(":memory:"), resolver=None, trade=True)
+    old = Trade(1, T0, "OLD", "u", True, 1, 1, 1, 1)
+    held = Trade(1, T0, "HELD", "u", True, 1, 1, 1, 1)
+    fresh = Trade(2, T0 + 3500, "NEW", "u", True, 1, 1, 1, 1)
+    eng.last = {"OLD": old, "HELD": held, "NEW": fresh}
+    eng.pending_fill["HELD"] = (0.05, None)
+    eng.prune(T0 + 3700)
+    assert set(eng.last) == {"HELD", "NEW"}

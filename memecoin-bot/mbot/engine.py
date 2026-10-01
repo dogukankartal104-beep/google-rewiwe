@@ -30,25 +30,27 @@ class Engine:
     def __init__(self, cfg: Config, store: Store, resolver: Optional[FundingResolver], trade: bool):
         self.cfg, self.store, self.resolver, self.trade = cfg, store, resolver, trade
         self.risk = RiskManager(cfg)
-        self.pending_eval: dict[str, Optional[int]] = {}  # mint → created_ts
+        self.pending_eval: dict[str, int] = {}  # mint → created_ts
         self.pending_fill: dict[str, tuple[float, Verdict]] = {}
         self.positions: dict[str, tuple[Position, Verdict]] = {}
         self.last: dict[str, Trade] = {}
         self.n_events = 0
+        self._last_prune = 0
 
     # ------------------------------------------------------------- events
     def on_event(self, ev: pf.Event, slot: int, sig: str, idx: int) -> None:
         self.store.add_event(ev, slot, sig, idx)
         self.n_events += 1
         if isinstance(ev, pf.CreateEvent):
-            self.pending_eval[ev.mint] = ev.timestamp
+            cts = ev.timestamp
+            if cts is None:  # eski layout: timestamp yok → duvar saati
+                cts = int(time.time())
+                self.store.fill_created_ts(ev.mint, cts)
+            self.pending_eval[ev.mint] = cts
         elif isinstance(ev, pf.TradeEvent):
             t = Trade(slot, ev.timestamp, ev.mint, ev.user, ev.is_buy, ev.sol_amount,
                       ev.token_amount, ev.virtual_sol_reserves, ev.virtual_token_reserves,
                       ev.real_sol_reserves, sig, idx)
-            if ev.mint in self.pending_eval and self.pending_eval[ev.mint] is None:
-                self.pending_eval[ev.mint] = ev.timestamp
-                self.store.fill_created_ts(ev.mint, ev.timestamp)
             self.last[ev.mint] = t
             self._on_trade(t)
         elif isinstance(ev, pf.CompleteEvent) and ev.mint in self.positions:
@@ -85,16 +87,23 @@ class Engine:
     async def tick(self) -> None:
         now = int(time.time())
         for mint, cts in list(self.pending_eval.items()):
-            if cts is not None and now >= cts + self.cfg.decision_age_s:
+            if now >= cts + self.cfg.decision_age_s:
                 del self.pending_eval[mint]
                 asyncio.create_task(self._evaluate(mint, cts + self.cfg.decision_age_s))
-            elif cts is None and mint not in self.last and len(self.pending_eval) > 50_000:
-                del self.pending_eval[mint]  # hiç trade gelmeyen ölü launch
         for mint, (p, _) in list(self.positions.items()):
             if now - p.opened_ts >= self.cfg.time_stop_s:
                 last = self.last[mint]
                 self._finish(mint, last.vsol, last.vtok, now, "time")
+        if now - self._last_prune >= 60:
+            self.prune(now)
         self.store.commit()
+
+    def prune(self, now: int, idle_s: int = 3600) -> None:
+        """Günde ~30k token açılıyor; 1 saattir trade görmeyenleri bellekten at."""
+        self._last_prune = now
+        keep = self.positions.keys() | self.pending_fill.keys()
+        for mint in [m for m, t in self.last.items() if t.ts < now - idle_s and m not in keep]:
+            del self.last[mint]
 
     async def _evaluate(self, mint: str, t_d: int) -> None:
         tok = self.store.token(mint)
