@@ -1,0 +1,7 @@
+# Bağımsız kullanıcıları fonlayan "hub" adresleri (CEX hot wallet, köprüler, vb.).
+# Buradaki bir adresten fonlanan cüzdanlar aynı cohort'a KONULMAZ.
+# Her satıra bir adres; '#' sonrası yorum. Adresleri Solscan/etiket kaynaklarından
+# kendin doğrula — yanlış adres, bundler'ları organik gösterebilir.
+#
+# Örnek format:
+# <ADRES>  # Binance hot wallet
