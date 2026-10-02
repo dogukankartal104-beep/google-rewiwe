@@ -186,6 +186,9 @@ def compute_features(
     # itibar
     smart_clusters = smart_share = rep_known = buyer_rep = 0.0
     c_prev, c_rug, c_grad = 0, 0.0, 0.0
+    reg_n, reg_rug, reg_grad = 0, 0.0, 0.0
+    if rep is not None:
+        reg_n, reg_rug, reg_grad = rep.regime(now_ts)
     if rep is not None and buyers:
         smart = {w for w in buyers if rep.is_smart(w)}
         smart_clusters = len({coh.cluster(w) for w in smart} - {coh.creator_cluster})
@@ -239,4 +242,7 @@ def compute_features(
         "creator_prev_tokens": float(c_prev),
         "creator_rug_rate": c_rug,
         "creator_grad_rate": c_grad,
+        "regime_n": float(reg_n),
+        "regime_rug_rate": reg_rug,
+        "regime_grad_rate": reg_grad,
     }

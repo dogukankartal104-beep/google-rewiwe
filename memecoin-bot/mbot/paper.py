@@ -90,6 +90,18 @@ def on_trade(p: Position, t: Trade, cfg: Config) -> bool:
     return p.closed_ts is not None
 
 
+def expected_tokens(size_sol: float, vsol: int, vtok: int, cfg: Config) -> int:
+    return pf.buy_quote(int(size_sol * pf.LAMPORTS), vsol, vtok, cfg.fee_bps)[0]
+
+
+def slipped(size_sol: float, decision: Trade, fill: Trade, cfg: Config) -> bool:
+    """Pump.fun buy emrindeki max_sol_cost tavanının karşılığı: karar anında beklenen
+    token miktarının 1/(1+slip)'inden azı gelecekse emir başarısız olur (dolmayız)."""
+    want = expected_tokens(size_sol, decision.vsol, decision.vtok, cfg)
+    got = expected_tokens(size_sol, fill.vsol, fill.vtok, cfg)
+    return got * (1 + cfg.max_entry_slippage) < want
+
+
 def simulate(
     mint: str,
     decision_trade: Trade,
@@ -106,6 +118,8 @@ def simulate(
         if len(after) < cfg.latency_trades:
             return None  # kimse işlem yapmadı → dolamazdık
         fill, rest = after[cfg.latency_trades - 1], after[cfg.latency_trades :]
+    if slipped(size_sol, decision_trade, fill, cfg):
+        return None
     p = open_position(mint, size_sol, fill.vsol, fill.vtok, fill.ts, cfg, watch)
     last = fill
     for t in rest:

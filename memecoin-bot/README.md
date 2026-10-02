@@ -48,7 +48,7 @@ WebSocket (logsSubscribe: pump.fun programı)
 cd memecoin-bot
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'      # numpy sadece `train` için gerekli
-pytest                       # 28 test, sentetik organik vs manipüle senaryolar
+pytest                       # 32 test, sentetik organik vs manipüle senaryolar
 ```
 
 Public Solana RPC rate-limit'lidir ve log'ları düşürür. Ciddi kullanım için
@@ -66,6 +66,19 @@ Her ayar `mbot/config.py` içinde; `MBOT_<ALAN_ADI>` ile override edilir
 adresler. Buradaki adresler üzerinden cüzdanlar **birbirine bağlanmaz**.
 `hubs.example.txt` dosyasını kopyalayıp kendi doğruladığın adreslerle doldur.
 
+## Milisaniye yarışına girmiyoruz
+
+Launch anındaki snipe yarışını validator'a yakın, Rust + Jito altyapılı ekipler kazanır.
+Bu bot bilerek 120. saniyede karar verir ve hıza değil bilgiye (cohort, itibar, filtre)
+dayanır. Bunu korumak için:
+
+- **`latency` komutu:** girişi 0–8 trade geciktirip edge'in eriyip erimediğini ölçer.
+- **Kayma tavanı (`max_entry_slippage`):** fiyat karar anından %15'ten fazla kaçtıysa alım
+  dolmaz (pump.fun `max_sol_cost` karşılığı) — pompayı kovalamayız.
+- **Likidite tavanı (`max_liq_frac`):** pozisyon curve'deki SOL'ün %2'sini geçmez; çıkarken
+  kendi satışımızla fiyatı çökertmeyiz.
+- **Rejim filtresi:** son 1 saatte biten tokenların %60'tan fazlası rug ise yeni giriş yok.
+
 ## Faz faz kullanım
 
 | Faz | Komut | Ne zaman ilerlenir |
@@ -75,6 +88,7 @@ adresler. Buradaki adresler üzerinden cüzdanlar **birbirine bağlanmaz**.
 | 1b İtibar | `python -m mbot wallets` | Akıllı cüzdan sayısı anlamlı (yüzlerce token sonrası) |
 | 2 Model | `python -m mbot train` | Tüm walk-forward foldlarında AUC > 0.55 (değilse model kaydedilmez) |
 | 2b Çıkış | `python -m mbot optimize --hours 168` | Görülmemiş veride mevcut ayarları geçerse önerilen `export`'lar |
+| 2c Hız testi | `python -m mbot latency --hours 168` | Edge 3 trade gecikmede hâlâ pozitif (değilse hız edge'idir, senin değil) |
 | 3 Paper | `python -m mbot paper` + `stats` | ≥500 paper işlem, paper ≈ dataset sonuçları |
 | 4 Canlı | (henüz yok — bilinçli olarak) | Faz 3 tutarlıysa küçük sermaye |
 

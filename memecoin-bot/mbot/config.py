@@ -35,6 +35,11 @@ class Config:
     rep_refresh_s: int = 600
     max_creator_rug_rate: float = 0.80  # en az 3 önceki tokenı varsa
 
+    # --- piyasa rejimi: son pencerede ufku biten tokenların rug oranı
+    regime_window_s: int = 3600
+    regime_min_tokens: int = 30
+    regime_max_rug: float = 0.60
+
     # --- hard filtreler
     max_bundle_share: float = 0.25
     max_creator_cluster_hold: float = 0.20
@@ -52,6 +57,7 @@ class Config:
     fee_bps: int = 125  # curve fee + creator fee, muhafazakâr
     tx_cost_sol: float = 0.002  # priority fee + Jito tip / tx
     latency_trades: int = 1  # karardan sonra kaç trade geç dolarız
+    max_entry_slippage: float = 0.15  # karar anı fiyatından fazla kaçtıysa alım dolmaz
 
     # --- çıkış kuralları
     stop_loss: float = 0.30
@@ -70,6 +76,7 @@ class Config:
     equity_sol: float = 10.0
     risk_per_trade: float = 0.005  # equity'nin %0.5'i
     max_open: int = 5
+    max_liq_frac: float = 0.02  # pozisyon ≤ curve'deki SOL'ün %2'si (çıkış likiditesi)
     daily_loss_limit: float = 0.03
     max_consecutive_losses: int = 8
 

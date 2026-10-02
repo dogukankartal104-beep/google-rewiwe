@@ -11,6 +11,15 @@ from datetime import datetime, timezone
 from .config import Config
 
 
+def position_size(equity: float, cfg: Config, real_sol: float | None = None) -> float:
+    """Risk bütçesi ile çıkış likiditesinin küçüğü: büyük pozisyon sığ curve'de kendi
+    satışıyla fiyatı çökertir."""
+    size = max(0.0, equity * cfg.risk_per_trade)
+    if real_sol is not None:
+        size = min(size, cfg.max_liq_frac * real_sol)
+    return size
+
+
 def _day(ts: int) -> str:
     return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%d")
 
@@ -39,7 +48,7 @@ class RiskManager:
             return "günlük kayıp limiti"
         return None
 
-    def can_open(self, mint: str, ts: int) -> tuple[bool, str]:
+    def can_open(self, mint: str, ts: int, real_sol: float | None = None) -> tuple[bool, str]:
         h = self.halted(ts)
         if h:
             return False, h
@@ -47,12 +56,12 @@ class RiskManager:
             return False, "zaten pozisyon var"
         if len(self.open) >= self.cfg.max_open:
             return False, "max açık pozisyon"
-        if self.size_sol() <= self.cfg.tx_cost_sol * 4:
-            return False, "pozisyon maliyete göre çok küçük"
+        if self.size_sol(real_sol) <= self.cfg.tx_cost_sol * 4:
+            return False, "pozisyon maliyete/likiditeye göre çok küçük"
         return True, ""
 
-    def size_sol(self) -> float:
-        return max(0.0, self.equity * self.cfg.risk_per_trade)
+    def size_sol(self, real_sol: float | None = None) -> float:
+        return position_size(self.equity, self.cfg, real_sol)
 
     def on_open(self, mint: str, cost_sol: float) -> None:
         self.open[mint] = cost_sol

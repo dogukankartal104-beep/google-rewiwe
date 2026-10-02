@@ -15,6 +15,7 @@ from dataclasses import replace
 from .config import Config
 from .dataset import Case
 from .paper import simulate
+from .risk import position_size
 
 GRID = {
     "stop_loss": [0.2, 0.3, 0.4, 0.5],
@@ -31,9 +32,9 @@ def combos(grid: dict = GRID) -> list[dict]:
 
 
 def returns(cases: list[Case], cfg: Config) -> list[float]:
-    size = cfg.equity_sol * cfg.risk_per_trade
     out = []
     for c in cases:
+        size = position_size(cfg.equity_sol, cfg, c.f["real_sol"])
         p = simulate(c.tok.mint, c.decision_trade, c.after, size, c.end_ts, cfg, c.watch)
         if p is not None:
             out.append(p.ret)
@@ -94,4 +95,32 @@ def walk_forward(cases: list[Case], cfg: Config, folds: int = 4, grid: dict = GR
         lines += [f"  export MBOT_{k.upper()}={v}" for k, v in final.items()]
     else:
         lines.append("\nGörülmemiş veride mevcut ayarları GEÇEMEDİ → değiştirme (overfit).")
+    return "\n".join(lines)
+
+
+def latency_report(cases: list[Case], cfg: Config, lags: tuple = (0, 1, 2, 3, 5, 8)) -> str:
+    """Edge hızdan mı geliyor? Girişi N trade geciktir; kâr hızla eriyorsa edge snipe
+    edge'idir ve yavaş bir bot için gerçek değildir."""
+    if not cases:
+        return "Aday yok."
+    lines = ["== Gecikme duyarlılığı (giriş N trade sonra dolarsa) =="]
+    base = None
+    res = {}
+    for lag in lags:
+        lc = replace(cfg, latency_trades=lag)
+        rets = returns(cases, lc)
+        fill = len(rets) / len(cases)
+        obj = objective(rets)
+        res[lag] = obj
+        base = obj if base is None else base
+        lines.append(f"gecikme {lag:2d} trade: dolum={fill:5.1%}  {_fmt(rets)}")
+    tail = res[lags[min(3, len(lags) - 1)]]
+    lines.append("")
+    if tail <= 0 < base:
+        lines.append(f"⚠ Edge {lags[min(3, len(lags) - 1)]} trade gecikmede yok oluyor → hız edge'i. "
+                     "Profesyonel snipe altyapısı olmadan bu edge senin değil. CANLIYA GEÇME.")
+    elif tail > 0:
+        lines.append("✓ Edge gecikmeye dayanıklı: hızdan değil bilgiden geliyor.")
+    else:
+        lines.append("Gecikme 0'da bile kârlı değil → önce filtre/skor tarafını düzelt.")
     return "\n".join(lines)

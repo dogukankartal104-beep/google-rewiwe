@@ -36,6 +36,10 @@ def main() -> None:
     o.add_argument("--include-watch", action="store_true", help="WATCH kararlarını da aday say")
     o.add_argument("--folds", type=int, default=4)
 
+    lt = sub.add_parser("latency", help="edge gecikmeye dayanıyor mu? (hız edge'i testi)")
+    lt.add_argument("--hours", type=float, default=168)
+    lt.add_argument("--include-watch", action="store_true")
+
     w = sub.add_parser("wallets", help="en yüksek itibarlı cüzdanlar")
     w.add_argument("--top", type=int, default=25)
 
@@ -83,6 +87,14 @@ def main() -> None:
         cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
                  if c.verdict.decision in keep]
         print(walk_forward(cases, cfg, a.folds))
+    elif a.cmd == "latency":
+        from .dataset import iter_cases
+        from .optimize import latency_report
+        now = int(time.time())
+        keep = {"BUY", "WATCH"} if a.include_watch else {"BUY"}
+        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
+                 if c.verdict.decision in keep]
+        print(latency_report(cases, cfg))
     elif a.cmd == "wallets":
         from .reputation import Reputation
         rep = Reputation(cfg)

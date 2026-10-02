@@ -50,6 +50,9 @@ def hard_filter(token: Token, f: dict[str, float], store: Store | None, cfg: Con
     if f.get("creator_prev_tokens", 0) >= 3 and f["creator_rug_rate"] >= cfg.max_creator_rug_rate:
         r.append(f"creator geçmişi: {int(f['creator_prev_tokens'])} tokenın "
                  f"%{f['creator_rug_rate'] * 100:.0f}'i rug")
+    if f.get("regime_n", 0) >= cfg.regime_min_tokens and f["regime_rug_rate"] > cfg.regime_max_rug:
+        r.append(f"piyasa rejimi kötü: son {cfg.regime_window_s // 60} dk "
+                 f"tokenların %{f['regime_rug_rate'] * 100:.0f}'i rug")
     if store is not None:
         n = store.creator_launches(token.creator, token.created_ts - 86_400, token.created_ts)
         if n >= cfg.max_creator_launches_24h:

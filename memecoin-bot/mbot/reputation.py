@@ -11,6 +11,7 @@ Skor = Bayes shrink: (Σr + prior·k) / (n + k) — 2 şanslı işlem cüzdanı 
 from __future__ import annotations
 
 import heapq
+from collections import deque
 from dataclasses import dataclass, field
 
 from . import pumpfun as pf
@@ -77,6 +78,7 @@ class Reputation:
     _seq: int = 0
     prior: float = 0.0  # tüm cüzdanların ortalama getirisi (shrink hedefi)
     _tot: list = field(default_factory=lambda: [0, 0.0])
+    _recent: deque = field(default_factory=deque)  # (end_ts, rugged, graduated)
 
     # ------------------------------------------------------------ biriktirme
     def add(self, o: TokenOutcome) -> None:
@@ -94,6 +96,7 @@ class Reputation:
         c[0] += 1
         c[1] += o.rugged
         c[2] += o.graduated
+        self._recent.append((o.end_ts, o.rugged, o.graduated))
         self.prior = self._tot[1] / self._tot[0] if self._tot[0] else 0.0
 
     def defer(self, o: TokenOutcome) -> None:
@@ -133,6 +136,16 @@ class Reputation:
         if not s:
             return 0, 0.0, 0.0
         return s[0], s[1] / s[0], s[2] / s[0]
+
+    def regime(self, now_ts: int) -> tuple[int, float, float]:
+        """Son `regime_window_s` içinde ufku biten tokenlar: (sayı, rug oranı, grad oranı)."""
+        lo = now_ts - self.cfg.regime_window_s
+        while self._recent and self._recent[0][0] < lo:
+            self._recent.popleft()
+        win = [r for r in self._recent if r[0] <= now_ts]
+        if not win:
+            return 0, 0.0, 0.0
+        return len(win), sum(r[1] for r in win) / len(win), sum(r[2] for r in win) / len(win)
 
     def top(self, n: int = 20) -> list[tuple[str, int, float, float]]:
         rows = [(w, *self.wallet_score(w)) for w, s in self.wallets.items()

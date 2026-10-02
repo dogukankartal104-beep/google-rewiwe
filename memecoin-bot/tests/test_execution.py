@@ -95,7 +95,7 @@ def test_engine_paper_flow():
     tok, trades, fund = organic()
     load(store, tok, trades, fund)
     eng = Engine(cfg, store, resolver=None, trade=True)
-    eng.pending_fill["ORG"] = (0.05, None, {})
+    eng.pending_fill["ORG"] = (0.05, None, {}, 0)
     nxt = trades[-1]
     eng._on_trade(nxt)
     assert "ORG" in eng.positions
@@ -113,6 +113,6 @@ def test_engine_prunes_idle_tokens():
     held = Trade(1, T0, "HELD", "u", True, 1, 1, 1, 1)
     fresh = Trade(2, T0 + 3500, "NEW", "u", True, 1, 1, 1, 1)
     eng.last = {"OLD": old, "HELD": held, "NEW": fresh}
-    eng.pending_fill["HELD"] = (0.05, None, {})
+    eng.pending_fill["HELD"] = (0.05, None, {}, 0)
     eng.prune(T0 + 3700)
     assert set(eng.last) == {"HELD", "NEW"}

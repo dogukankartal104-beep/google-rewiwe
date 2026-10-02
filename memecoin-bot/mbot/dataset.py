@@ -15,6 +15,7 @@ from .config import Config
 from .features import compute_features, insider_watch
 from .paper import simulate
 from .reputation import Reputation, token_outcome
+from .risk import position_size
 from .scoring import Verdict, evaluate
 from .store import Store, Token, Trade
 
@@ -60,9 +61,9 @@ def iter_cases(store: Store, cfg: Config, t0: int, t1: int, use_rep: bool = True
 
 def build_rows(store: Store, cfg: Config, t0: int, t1: int) -> list[dict]:
     rows = []
-    size = cfg.equity_sol * cfg.risk_per_trade
     for c in iter_cases(store, cfg, t0, t1):
         tok, f, v, after = c.tok, c.f, c.verdict, c.after
+        size = position_size(cfg.equity_sol, cfg, f["real_sol"])
         p0 = pf.price(c.decision_trade.vsol, c.decision_trade.vtok)
         mults = [pf.price(t.vsol, t.vtok) / p0 for t in after]
         peak_i = max(range(len(mults)), key=mults.__getitem__) if mults else None

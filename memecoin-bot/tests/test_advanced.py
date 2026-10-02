@@ -181,3 +181,61 @@ def test_exit_optimizer_runs_walk_forward():
     out = exit_walk_forward(cases, cfg, folds=4, grid=grid)
     assert "fold 4" in out and "Toplam görülmemiş veri" in out
     assert "Sadece" in exit_walk_forward(cases[:20], cfg, folds=4, grid=grid)
+
+
+# ------------------------------------------------------------------ hız / likidite / rejim
+from test_execution import _at  # noqa: E402
+
+from mbot.dataset import Case  # noqa: E402
+from mbot.optimize import latency_report  # noqa: E402
+from mbot.paper import simulate as _simulate  # noqa: E402
+from mbot.risk import position_size  # noqa: E402
+from mbot.reputation import TokenOutcome  # noqa: E402
+
+
+def test_position_capped_by_curve_liquidity():
+    cfg = Config(equity_sol=100, risk_per_trade=0.01, max_liq_frac=0.02)
+    assert position_size(100, cfg) == 1.0
+    assert position_size(100, cfg, real_sol=10) == 0.2  # sığ curve → küçük pozisyon
+    assert position_size(100, cfg, real_sol=80) == 1.0
+
+
+def test_slippage_cap_blocks_chasing():
+    cfg = Config(max_entry_slippage=0.15)
+    d = _at(1.0, T0)
+    assert _simulate("M", d, [_at(1.5, T0 + 1), _at(1.5, T0 + 99)], 1.0, T0 + 999, cfg) is None
+    assert _simulate("M", d, [_at(1.05, T0 + 1), _at(1.1, T0 + 99)], 1.0, T0 + 999, cfg) is not None
+
+
+def test_latency_report_flags_speed_edge():
+    cfg = Config()
+    tok = Token("M", "m", "M", "dev", SLOT0, T0)
+    after = [_at(1.7, T0 + 1)] + [_at(1.7, T0 + 2 + i) for i in range(10)]
+    case = Case(tok, {"real_sol": 30.0}, None, _at(1.0, T0), after, T0 + 1800, {})
+    out = latency_report([case] * 5, cfg)
+    assert "hız edge'i" in out  # sadece gecikmesiz giren kazanıyor
+
+    slow = [_at(1.0 + 0.01 * i, T0 + 1 + i) for i in range(60)]  # yavaş, kalıcı yükseliş
+    case2 = Case(tok, {"real_sol": 30.0}, None, _at(1.0, T0), slow, T0 + 1800, {})
+    assert "gecikmeye dayanıklı" in latency_report([case2] * 5, replace(cfg, time_stop_s=50))
+
+
+def test_bad_market_regime_blocks_entries():
+    cfg = Config(regime_min_tokens=30, regime_max_rug=0.6)
+    rep = Reputation(cfg)
+    for i in range(40):
+        rep.add(TokenOutcome(f"r{i}", f"c{i}", T0 - 600 + i, {}, rugged=i % 10 < 8, graduated=False))
+    n, rug, _ = rep.regime(T0)
+    assert n == 40 and rug == 0.8
+    assert rep.regime(T0 + 7200)[0] == 0  # pencere dışına çıkınca unutulur
+
+    store = Store(":memory:")
+    tok, trades, fund = organic()
+    load(store, tok, trades, fund)
+    from mbot.features import compute_features
+    rep2 = Reputation(cfg)
+    for i in range(40):
+        rep2.add(TokenOutcome(f"r{i}", f"c{i}", T0 - 600 + i, {}, rugged=i % 10 < 8, graduated=False))
+    f = compute_features(tok, trades, fund, T0 + 120, rep=rep2)
+    v = evaluate(tok, f, store, cfg)
+    assert v.decision == "PASS" and any("rejimi" in r for r in v.reasons)

@@ -20,7 +20,7 @@ from .cohort import build_cohorts
 from .features import compute_features, insider_watch
 from .funding import FundingResolver
 from .model import load_models
-from .paper import Position, close, on_trade, open_position
+from .paper import Position, close, expected_tokens, on_trade, open_position
 from .reputation import Reputation
 from .risk import RiskManager
 from .scoring import Verdict, evaluate
@@ -34,7 +34,8 @@ class Engine:
         self.cfg, self.store, self.resolver, self.trade = cfg, store, resolver, trade
         self.risk = RiskManager(cfg)
         self.pending_eval: dict[str, int] = {}  # mint → created_ts
-        self.pending_fill: dict[str, tuple[float, Verdict, dict[str, int]]] = {}
+        # mint → (boyut, karar, insider watch, karar anında beklenen token)
+        self.pending_fill: dict[str, tuple[float, Verdict, dict[str, int], int]] = {}
         self.positions: dict[str, tuple[Position, Verdict]] = {}
         self.last: dict[str, Trade] = {}
         self.n_events = 0
@@ -74,7 +75,10 @@ class Engine:
 
     def _on_trade(self, t: Trade) -> None:
         if t.mint in self.pending_fill:  # latency: kararın ardından gelen ilk trade'de dol
-            size, verdict, watch = self.pending_fill.pop(t.mint)
+            size, verdict, watch, want = self.pending_fill.pop(t.mint)
+            if expected_tokens(size, t.vsol, t.vtok, self.cfg) * (1 + self.cfg.max_entry_slippage) < want:
+                log.info("SLIPPAGE  %s fiyat kaçtı, alım dolmadı", t.mint)
+                return
             p = open_position(t.mint, size, t.vsol, t.vtok, t.ts, self.cfg, watch)
             self.positions[t.mint] = (p, verdict)
             self.risk.on_open(t.mint, p.cost_sol)
@@ -149,10 +153,13 @@ class Engine:
                  f["effective_buyers"], f["unique_buyers"], f["smart_clusters"],
                  f["mev_share"] * 100, v.probs or "", "; ".join(v.reasons))
         if v.decision == "BUY" and self.trade:
-            ok, why = self.risk.can_open(mint, int(time.time()))
+            ok, why = self.risk.can_open(mint, int(time.time()), f["real_sol"])
             if ok:
                 watch = insider_watch(tok, trades, coh, self.rep)
-                self.pending_fill[mint] = (self.risk.size_sol(), v, watch)
+                size = self.risk.size_sol(f["real_sol"])
+                last = trades[-1]
+                self.pending_fill[mint] = (size, v, watch,
+                                           expected_tokens(size, last.vsol, last.vtok, self.cfg))
             else:
                 log.info("RISK BLOCK %s: %s", mint, why)
 
