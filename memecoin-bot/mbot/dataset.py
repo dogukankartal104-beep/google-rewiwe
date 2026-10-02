@@ -31,6 +31,24 @@ class Case:
     watch: dict[str, int]
 
 
+def make_case(store: Store, cfg: Config, tok: Token, trades: list[Trade],
+              rep: Reputation | None) -> Case | None:
+    """Tek token için karar anı durumu (trades: ufuk sonuna kadarki tüm trade'ler)."""
+    t_d = tok.created_ts + cfg.decision_age_s
+    before = [t for t in trades if t.ts <= t_d]
+    after = [t for t in trades if t.ts > t_d]
+    if len(before) < 3:
+        return None
+    users = {t.user for t in before} | {tok.creator}
+    fundings = store.fundings_closure(users, cfg.funding_depth)
+    coh = build_cohorts(tok, before, fundings, cfg.hubs, cfg.same_slot_size_tol,
+                        cfg.funding_depth)
+    f = compute_features(tok, before, fundings, t_d, cfg.hubs, cfg.same_slot_size_tol,
+                         cfg.fresh_wallet_s, cfg.funding_depth, rep, coh)
+    return Case(tok, f, evaluate(tok, f, store, cfg), before[-1], after,
+                t_d + cfg.horizon_s, insider_watch(tok, before, coh, rep))
+
+
 def iter_cases(store: Store, cfg: Config, t0: int, t1: int, use_rep: bool = True):
     """Her token için karar anı durumu. İtibar tek geçişte, sadece ufku karar anından
     önce bitmiş tokenlardan beslenir → look-ahead yok."""
@@ -39,24 +57,14 @@ def iter_cases(store: Store, cfg: Config, t0: int, t1: int, use_rep: bool = True
         rep.refresh_from_store(store, t0 + cfg.decision_age_s)
     for tok in store.tokens_created_between(t0, t1):
         t_d = tok.created_ts + cfg.decision_age_s
-        end = t_d + cfg.horizon_s
         if rep is not None:
             rep.advance(t_d)
-        trades = store.trades(tok.mint, until_ts=end)
+        trades = store.trades(tok.mint, until_ts=t_d + cfg.horizon_s)
         if rep is not None:
             rep.defer(token_outcome(tok, trades, cfg))
-        before = [t for t in trades if t.ts <= t_d]
-        after = [t for t in trades if t.ts > t_d]
-        if len(before) < 3:
-            continue
-        users = {t.user for t in before} | {tok.creator}
-        fundings = store.fundings_closure(users, cfg.funding_depth)
-        coh = build_cohorts(tok, before, fundings, cfg.hubs, cfg.same_slot_size_tol,
-                            cfg.funding_depth)
-        f = compute_features(tok, before, fundings, t_d, cfg.hubs, cfg.same_slot_size_tol,
-                             cfg.fresh_wallet_s, cfg.funding_depth, rep, coh)
-        yield Case(tok, f, evaluate(tok, f, store, cfg), before[-1], after, end,
-                   insider_watch(tok, before, coh, rep))
+        c = make_case(store, cfg, tok, trades, rep)
+        if c is not None:
+            yield c
 
 
 def build_rows(store: Store, cfg: Config, t0: int, t1: int) -> list[dict]:

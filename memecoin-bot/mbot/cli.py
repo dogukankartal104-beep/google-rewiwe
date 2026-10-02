@@ -48,6 +48,15 @@ def main() -> None:
     mc.add_argument("--max-dd", type=float, default=0.20, help="kabul edilebilir drawdown")
     mc.add_argument("--sims", type=int, default=5000)
 
+    sub.add_parser("reconcile", help="paper işlemler backtest'in tahminiyle uyumlu mu?")
+    co = sub.add_parser("costs", help="maliyet artınca edge dayanıyor mu?")
+    co.add_argument("--hours", type=float, default=168)
+    co.add_argument("--include-watch", action="store_true")
+    dr = sub.add_parser("drift", help="model eskidi mi?")
+    dr.add_argument("--hours", type=float, default=48)
+    gl = sub.add_parser("golive", help="canlıya geçiş kontrol listesi")
+    gl.add_argument("--hours", type=float, default=168)
+
     w = sub.add_parser("wallets", help="en yüksek itibarlı cüzdanlar")
     w.add_argument("--top", type=int, default=25)
 
@@ -123,6 +132,23 @@ def main() -> None:
         print(mc_report([r[1] for r in rows], _per_period([r[0] for r in rows], a.days),
                         cfg.risk_per_trade, a.max_dd, a.sims,
                         kill_after=cfg.max_consecutive_losses))
+    elif a.cmd == "reconcile":
+        from .analysis import reconcile
+        print(reconcile(store, cfg).text)
+    elif a.cmd == "costs":
+        from .analysis import cost_report
+        from .dataset import iter_cases
+        now = int(time.time())
+        keep = {"BUY", "WATCH"} if a.include_watch else {"BUY"}
+        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
+                 if c.verdict.decision in keep]
+        print(cost_report(cases, cfg))
+    elif a.cmd == "drift":
+        from .analysis import drift
+        print(drift(store, cfg, a.hours).text)
+    elif a.cmd == "golive":
+        from .analysis import golive
+        print(golive(store, cfg, a.hours))
     elif a.cmd == "wallets":
         from .reputation import Reputation
         rep = Reputation(cfg)

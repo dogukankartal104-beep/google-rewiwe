@@ -48,7 +48,7 @@ WebSocket (logsSubscribe: pump.fun programı)
 cd memecoin-bot
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'      # numpy sadece `train` için gerekli
-pytest                       # 35 test, sentetik organik vs manipüle senaryolar
+pytest                       # 39 test, sentetik organik vs manipüle senaryolar
 ```
 
 Public Solana RPC rate-limit'lidir ve log'ları düşürür. Ciddi kullanım için
@@ -90,7 +90,11 @@ dayanır. Bunu korumak için:
 | 2b Çıkış | `python -m mbot optimize --hours 168` | Görülmemiş veride mevcut ayarları geçerse önerilen `export`'lar |
 | 2d Risk | `python -m mbot montecarlo` (veya `--source paper`) | Kötü senaryoda drawdown kabul edilebilir; önerilen `MBOT_RISK_PER_TRADE` |
 | 2c Hız testi | `python -m mbot latency --hours 168` | Edge 3 trade gecikmede hâlâ pozitif (değilse hız edge'idir, senin değil) |
+| 2e Maliyet | `python -m mbot costs` | Edge maliyet ×2'de hâlâ pozitif |
 | 3 Paper | `python -m mbot paper` + `stats` | ≥500 paper işlem, paper ≈ dataset sonuçları |
+| 3b Uyum | `python -m mbot reconcile` | Paper getirisi backtest'ten en fazla 5 puan kötü |
+| 3c Drift | `python -m mbot drift` (haftalık) | Modeller "ESKİDİ" demiyor |
+| ✔ Kontrol | `python -m mbot golive` | Tüm satırlar ✅ |
 | 4 Canlı | (henüz yok — bilinçli olarak) | Faz 3 tutarlıysa küçük sermaye |
 
 `report` kuralı: **BUY satırında `ort(top5 hariç)` > 0 değilse, n < 500 ise veya skor

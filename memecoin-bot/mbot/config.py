@@ -80,6 +80,11 @@ class Config:
     daily_loss_limit: float = 0.03
     max_consecutive_losses: int = 8
 
+    # --- canlıya geçiş kontrol listesi
+    golive_min_paper: int = 500
+    golive_max_gap: float = 0.05  # paper backtest'ten en fazla 5 puan kötü olabilir
+    golive_max_dd: float = 0.20
+
     hubs: set[str] = field(default_factory=set)
 
     @classmethod
