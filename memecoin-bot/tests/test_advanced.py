@@ -239,3 +239,33 @@ def test_bad_market_regime_blocks_entries():
     f = compute_features(tok, trades, fund, T0 + 120, rep=rep2)
     v = evaluate(tok, f, store, cfg)
     assert v.decision == "PASS" and any("rejimi" in r for r in v.reasons)
+
+
+# ------------------------------------------------------------------ Monte Carlo
+from mbot import montecarlo as mc  # noqa: E402
+
+
+def test_monte_carlo_risk_scaling():
+    rets = [0.8, -0.3, -0.3, 0.5, -0.3, -0.3, 1.2, -0.3, -0.25, 0.1] * 5
+    lo = mc.simulate(rets, 200, 0.005, sims=1000)
+    hi = mc.simulate(rets, 200, 0.05, sims=1000)
+    assert hi.dd_p95 > lo.dd_p95 * 5  # 10x risk ≈ 10x drawdown
+    assert lo.ret_p50 > 0 and lo.p_ruin == 0
+    assert lo.streak_p95 >= 2
+    safe = mc.max_safe_risk(rets, 200, 0.20, sims=500)
+    assert safe is not None and mc.simulate(rets, 200, safe, sims=500).dd_p95 <= 0.20
+
+
+def test_monte_carlo_report_warnings():
+    losing = [-0.3, -0.2, 0.1, -0.4, 0.05] * 10
+    out = mc.report(losing, 100, 0.01, sims=500)
+    assert "Tipik senaryo zararda" in out
+    assert "en az 30" in mc.report([0.1] * 5, 100, 0.01)
+    winning = [0.3, -0.1, 0.2, -0.1, 0.15] * 10
+    assert "MBOT_RISK_PER_TRADE=" in mc.report(winning, 100, 0.005, sims=500)
+
+
+def test_monte_carlo_flags_too_tight_kill_switch():
+    rets = [-0.3] * 6 + [1.5] * 4
+    out = mc.report(rets * 10, 300, 0.005, sims=500, kill_after=3)
+    assert "kill switch" in out and "MBOT_MAX_CONSECUTIVE_LOSSES=" in out
