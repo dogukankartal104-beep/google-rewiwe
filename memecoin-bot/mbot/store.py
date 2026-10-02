@@ -94,12 +94,13 @@ class Store:
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=NORMAL")
         self._ids: OrderedDict[str, int] = OrderedDict()
-        old = self._has_v1_trades()
-        if old:
+        if self._has_v1_trades():
             self.db.execute("ALTER TABLE trades RENAME TO trades_v1")
             self.db.execute("DROP INDEX IF EXISTS trades_mint")
         self.db.executescript(SCHEMA)
-        if old:
+        # yarıda kesilmiş taşıma da burada tamamlanır (INSERT OR IGNORE tekrarları atlar)
+        if self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND "
+                           "name='trades_v1'").fetchone():
             self._migrate_v1()
         self.db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 

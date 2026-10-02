@@ -98,3 +98,22 @@ def test_store_migrates_v1_schema_and_dedupes(tmp_path):
     s.add_trade(Trade(10, 100, "MINT", "alice", True, 5, 6, 7, 8, None, "S1", 0))  # aynı imza
     assert s.n_trades() == 2 and s.trades("YOK") == []
     assert len(s.trades("MINT", until_ts=100)) == 1
+
+
+def test_store_resumes_interrupted_migration(tmp_path):
+    import sqlite3
+
+    from mbot.store import Store
+
+    p = str(tmp_path / "half.db")
+    Store(p).db.close()  # yeni şema oluştu, ama eski tablo yarıda kalmış gibi yap:
+    db = sqlite3.connect(p)
+    db.execute("CREATE TABLE trades_v1 (sig TEXT, idx INTEGER, slot INTEGER, ts INTEGER, "
+               "mint TEXT, user TEXT, is_buy INTEGER, sol INTEGER, tok INTEGER, vsol INTEGER, "
+               "vtok INTEGER, rsol INTEGER)")
+    db.execute("INSERT INTO trades_v1 VALUES ('S1',0,10,100,'MINT','alice',1,5,6,7,8,NULL)")
+    db.commit()
+    db.close()
+    s = Store(p)
+    assert len(s.trades("MINT")) == 1
+    assert not s.db.execute("SELECT 1 FROM sqlite_master WHERE name='trades_v1'").fetchone()
