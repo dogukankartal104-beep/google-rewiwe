@@ -73,3 +73,28 @@ def test_find_funder_parses_system_transfer():
     assert find_funder(tx, "N") == ("G", 9)
     assert find_funder(tx, "nobody") == (None, 0)
     assert find_funder(None, "W") == (None, 0)
+
+
+def test_store_migrates_v1_schema_and_dedupes(tmp_path):
+    import sqlite3
+
+    from mbot.store import Store, Trade
+
+    p = str(tmp_path / "old.db")
+    db = sqlite3.connect(p)
+    db.execute("CREATE TABLE trades (sig TEXT, idx INTEGER, slot INTEGER, ts INTEGER, mint TEXT, "
+               "user TEXT, is_buy INTEGER, sol INTEGER, tok INTEGER, vsol INTEGER, vtok INTEGER, "
+               "rsol INTEGER, PRIMARY KEY (sig, idx))")
+    db.execute("INSERT INTO trades VALUES ('S1',0,10,100,'MINT','alice',1,5,6,7,8,NULL)")
+    db.execute("INSERT INTO trades VALUES ('S2',0,11,101,'MINT','bob',0,1,2,3,4,9)")
+    db.commit()
+    db.close()
+
+    s = Store(p)
+    got = s.trades("MINT")
+    assert [(t.user, t.is_buy, t.sol, t.rsol) for t in got] == [("alice", True, 5, None),
+                                                                 ("bob", False, 1, 9)]
+    assert s.db.execute("PRAGMA user_version").fetchone()[0] == 2
+    s.add_trade(Trade(10, 100, "MINT", "alice", True, 5, 6, 7, 8, None, "S1", 0))  # aynı imza
+    assert s.n_trades() == 2 and s.trades("YOK") == []
+    assert len(s.trades("MINT", until_ts=100)) == 1

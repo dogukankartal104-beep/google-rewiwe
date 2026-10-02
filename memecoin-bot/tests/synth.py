@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 
 from mbot import pumpfun as pf
 from mbot.store import Funding, Store, Token, Trade
@@ -96,11 +97,7 @@ def load(store: Store, tok: Token, trades: list[Trade], fund: dict[str, Funding]
         (tok.mint, tok.name, tok.symbol, "", tok.creator, "", tok.created_slot, tok.created_ts),
     )
     for t in trades:
-        store.db.execute(
-            "INSERT INTO trades VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (t.sig + tok.mint, t.idx, t.slot, t.ts, t.mint, t.user, int(t.is_buy), t.sol, t.tok,
-             t.vsol, t.vtok, t.rsol),
-        )
+        store.add_trade(replace(t, sig=t.sig + tok.mint))
     for f in fund.values():
         store.put_funding(f, T0)
     store.commit()

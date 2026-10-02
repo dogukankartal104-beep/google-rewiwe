@@ -5,7 +5,9 @@ Faz 0'ın asıl çıktısı bu veritabanıdır; tüm modeller buradan beslenir.
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
@@ -20,12 +22,15 @@ CREATE TABLE IF NOT EXISTS tokens (
 );
 CREATE INDEX IF NOT EXISTS tokens_created ON tokens(created_ts);
 CREATE INDEX IF NOT EXISTS tokens_creator ON tokens(creator);
+-- 44 karakterlik adresler bir kez saklanır, trade'ler küçük tamsayı id taşır
+CREATE TABLE IF NOT EXISTS addrs (id INTEGER PRIMARY KEY, addr TEXT NOT NULL UNIQUE);
+-- sig_h: 88 karakterlik imzanın 8 byte özeti (sadece tekrar kaydı önlemek için)
 CREATE TABLE IF NOT EXISTS trades (
-    sig TEXT, idx INTEGER, slot INTEGER, ts INTEGER, mint TEXT, user TEXT,
+    sig_h INTEGER, idx INTEGER, slot INTEGER, ts INTEGER, mint_id INTEGER, user_id INTEGER,
     is_buy INTEGER, sol INTEGER, tok INTEGER, vsol INTEGER, vtok INTEGER, rsol INTEGER,
-    PRIMARY KEY (sig, idx)
-);
-CREATE INDEX IF NOT EXISTS trades_mint ON trades(mint, slot);
+    PRIMARY KEY (sig_h, idx)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS trades_mint ON trades(mint_id, slot);
 CREATE TABLE IF NOT EXISTS funders (
     wallet TEXT PRIMARY KEY, funder TEXT, lamports INTEGER,
     first_ts INTEGER, resolved_ts INTEGER
@@ -72,6 +77,15 @@ class Funding:
     first_ts: Optional[int]
 
 
+def sig_hash(sig: str) -> int:
+    return int.from_bytes(hashlib.blake2b(sig.encode(), digest_size=8).digest(), "big",
+                          signed=True)
+
+
+SCHEMA_VERSION = 2
+ADDR_CACHE = 300_000  # ~45 MB üst sınır; günde ~30k token + ~100k+ cüzdan
+
+
 class Store:
     def __init__(self, path: str):
         if path != ":memory:":
@@ -79,20 +93,64 @@ class Store:
         self.db = sqlite3.connect(path)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA synchronous=NORMAL")
+        self._ids: OrderedDict[str, int] = OrderedDict()
+        old = self._has_v1_trades()
+        if old:
+            self.db.execute("ALTER TABLE trades RENAME TO trades_v1")
+            self.db.execute("DROP INDEX IF EXISTS trades_mint")
         self.db.executescript(SCHEMA)
+        if old:
+            self._migrate_v1()
+        self.db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+
+    def _has_v1_trades(self) -> bool:
+        cols = [r[1] for r in self.db.execute("PRAGMA table_info(trades)")]
+        return "sig" in cols
+
+    def _migrate_v1(self) -> None:
+        """Eski (metin sütunlu) trade tablosunu yeni kompakt şemaya taşı."""
+        cur = self.db.execute("SELECT slot,ts,mint,user,is_buy,sol,tok,vsol,vtok,rsol,sig,idx "
+                              "FROM trades_v1")
+        while rows := cur.fetchmany(20_000):
+            for r in rows:
+                self.add_trade(Trade(r[0], r[1], r[2], r[3], bool(r[4]), *r[5:]))
+        self.db.execute("DROP TABLE trades_v1")
+        self.db.commit()
 
     def commit(self) -> None:
         self.db.commit()
 
+    # ------------------------------------------------------------ adres id'leri
+    def _addr_id(self, addr: str, create: bool = True) -> Optional[int]:
+        i = self._ids.get(addr)
+        if i is not None:
+            self._ids.move_to_end(addr)
+            return i
+        row = self.db.execute("SELECT id FROM addrs WHERE addr=?", (addr,)).fetchone()
+        if row is None:
+            if not create:
+                return None
+            i = self.db.execute("INSERT INTO addrs (addr) VALUES (?)", (addr,)).lastrowid
+        else:
+            i = row[0]
+        self._ids[addr] = i
+        if len(self._ids) > ADDR_CACHE:
+            self._ids.popitem(last=False)
+        return i
+
     # ------------------------------------------------------------ writes
+    def add_trade(self, t: Trade) -> None:
+        self.db.execute(
+            "INSERT OR IGNORE INTO trades VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (sig_hash(t.sig), t.idx, t.slot, t.ts, self._addr_id(t.mint), self._addr_id(t.user),
+             int(t.is_buy), t.sol, t.tok, t.vsol, t.vtok, t.rsol),
+        )
+
     def add_event(self, ev, slot: int, sig: str, idx: int) -> None:
         if isinstance(ev, TradeEvent):
-            self.db.execute(
-                "INSERT OR IGNORE INTO trades VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                (sig, idx, slot, ev.timestamp, ev.mint, ev.user, int(ev.is_buy), ev.sol_amount,
-                 ev.token_amount, ev.virtual_sol_reserves, ev.virtual_token_reserves,
-                 ev.real_sol_reserves),
-            )
+            self.add_trade(Trade(slot, ev.timestamp, ev.mint, ev.user, ev.is_buy, ev.sol_amount,
+                                 ev.token_amount, ev.virtual_sol_reserves,
+                                 ev.virtual_token_reserves, ev.real_sol_reserves, sig, idx))
         elif isinstance(ev, CreateEvent):
             self.db.execute(
                 "INSERT OR IGNORE INTO tokens (mint,name,symbol,uri,creator,bonding_curve,"
@@ -140,14 +198,21 @@ class Store:
         return [Token(*r) for r in rows]
 
     def trades(self, mint: str, until_ts: Optional[int] = None) -> list[Trade]:
-        q = ("SELECT slot,ts,mint,user,is_buy,sol,tok,vsol,vtok,rsol,sig,idx FROM trades "
-             "WHERE mint=?")
-        args: list = [mint]
+        mid = self._addr_id(mint, create=False)
+        if mid is None:
+            return []
+        q = ("SELECT t.slot,t.ts,a.addr,t.is_buy,t.sol,t.tok,t.vsol,t.vtok,t.rsol,t.sig_h,t.idx "
+             "FROM trades t JOIN addrs a ON a.id = t.user_id WHERE t.mint_id=?")
+        args: list = [mid]
         if until_ts is not None:
-            q += " AND ts <= ?"
+            q += " AND t.ts <= ?"
             args.append(until_ts)
-        q += " ORDER BY slot, sig, idx"
-        return [Trade(r[0], r[1], r[2], r[3], bool(r[4]), *r[5:]) for r in self.db.execute(q, args)]
+        q += " ORDER BY t.slot, t.sig_h, t.idx"
+        return [Trade(r[0], r[1], mint, r[2], bool(r[3]), r[4], r[5], r[6], r[7], r[8],
+                      str(r[9]), r[10]) for r in self.db.execute(q, args)]
+
+    def n_trades(self) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM trades").fetchone()[0]
 
     def fundings(self, wallets: Iterable[str]) -> dict[str, Funding]:
         ws = list(set(wallets))

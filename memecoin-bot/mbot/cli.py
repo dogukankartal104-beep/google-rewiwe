@@ -159,7 +159,7 @@ def main() -> None:
         for wal, n, mean, win in rep.top(a.top):
             print(f"{wal:44s} {n:5d} {mean:+7.1%} {win:6.1%} {'✓' if rep.is_smart(wal) else ''}")
     elif a.cmd == "stats":
-        for t in ("tokens", "trades", "funders", "paper_trades"):
+        for t in ("tokens", "trades", "addrs", "funders", "paper_trades"):
             n = store.db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
             print(f"{t:13s} {n}")
         row = store.db.execute(
