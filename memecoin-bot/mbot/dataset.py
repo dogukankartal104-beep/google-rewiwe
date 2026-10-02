@@ -7,35 +7,67 @@ import csv
 import statistics
 from typing import Iterable
 
+from dataclasses import dataclass
+
 from . import pumpfun as pf
+from .cohort import build_cohorts
 from .config import Config
-from .features import compute_features
+from .features import compute_features, insider_watch
 from .paper import simulate
-from .scoring import evaluate
-from .store import Store
+from .reputation import Reputation, token_outcome
+from .scoring import Verdict, evaluate
+from .store import Store, Token, Trade
+
+
+@dataclass
+class Case:
+    tok: Token
+    f: dict[str, float]
+    verdict: Verdict
+    decision_trade: Trade
+    after: list[Trade]
+    end_ts: int
+    watch: dict[str, int]
+
+
+def iter_cases(store: Store, cfg: Config, t0: int, t1: int, use_rep: bool = True):
+    """Her token için karar anı durumu. İtibar tek geçişte, sadece ufku karar anından
+    önce bitmiş tokenlardan beslenir → look-ahead yok."""
+    rep = Reputation(cfg) if use_rep else None
+    if rep is not None:
+        rep.refresh_from_store(store, t0 + cfg.decision_age_s)
+    for tok in store.tokens_created_between(t0, t1):
+        t_d = tok.created_ts + cfg.decision_age_s
+        end = t_d + cfg.horizon_s
+        if rep is not None:
+            rep.advance(t_d)
+        trades = store.trades(tok.mint, until_ts=end)
+        if rep is not None:
+            rep.defer(token_outcome(tok, trades, cfg))
+        before = [t for t in trades if t.ts <= t_d]
+        after = [t for t in trades if t.ts > t_d]
+        if len(before) < 3:
+            continue
+        users = {t.user for t in before} | {tok.creator}
+        fundings = store.fundings_closure(users, cfg.funding_depth)
+        coh = build_cohorts(tok, before, fundings, cfg.hubs, cfg.same_slot_size_tol,
+                            cfg.funding_depth)
+        f = compute_features(tok, before, fundings, t_d, cfg.hubs, cfg.same_slot_size_tol,
+                             cfg.fresh_wallet_s, cfg.funding_depth, rep, coh)
+        yield Case(tok, f, evaluate(tok, f, store, cfg), before[-1], after, end,
+                   insider_watch(tok, before, coh, rep))
 
 
 def build_rows(store: Store, cfg: Config, t0: int, t1: int) -> list[dict]:
     rows = []
     size = cfg.equity_sol * cfg.risk_per_trade
-    for tok in store.tokens_created_between(t0, t1):
-        t_d = tok.created_ts + cfg.decision_age_s
-        end = t_d + cfg.horizon_s
-        trades = store.trades(tok.mint, until_ts=end)
-        before = [t for t in trades if t.ts <= t_d]
-        after = [t for t in trades if t.ts > t_d]
-        if len(before) < 3:
-            continue
-        fundings = store.fundings(t.user for t in before)
-        f = compute_features(tok, before, fundings, t_d, cfg.hubs, cfg.same_slot_size_tol,
-                             cfg.fresh_wallet_s)
-        v = evaluate(tok, f, store, cfg)
-
-        p0 = pf.price(before[-1].vsol, before[-1].vtok)
+    for c in iter_cases(store, cfg, t0, t1):
+        tok, f, v, after = c.tok, c.f, c.verdict, c.after
+        p0 = pf.price(c.decision_trade.vsol, c.decision_trade.vtok)
         mults = [pf.price(t.vsol, t.vtok) / p0 for t in after]
         peak_i = max(range(len(mults)), key=mults.__getitem__) if mults else None
         dd_after_peak = (min(mults[peak_i:]) / mults[peak_i]) if peak_i is not None else 1.0
-        pos = simulate(tok.mint, before[-1], after, size, end, cfg)
+        pos = simulate(tok.mint, c.decision_trade, after, size, c.end_ts, cfg, c.watch)
         rows.append({
             "mint": tok.mint, "symbol": tok.symbol, "created_ts": tok.created_ts,
             **{k: round(val, 5) for k, val in f.items()},
@@ -48,7 +80,7 @@ def build_rows(store: Store, cfg: Config, t0: int, t1: int) -> list[dict]:
             "y_max_mult": round(max(mults), 4) if mults else 1.0,
             "y_min_mult": round(min(mults), 4) if mults else 1.0,
             "y_rug": int(dd_after_peak <= 0.2),
-            "y_graduated": int(tok.completed_ts is not None and tok.completed_ts <= end),
+            "y_graduated": int(tok.completed_ts is not None and tok.completed_ts <= c.end_ts),
         })
     return rows
 
@@ -81,7 +113,9 @@ def report(rows: Iterable[dict]) -> str:
     for d in ("BUY", "WATCH", "PASS"):
         out.append(f"{d:6s} " + _stats([float(r["y_ret"]) for r in rows if r["decision"] == d]))
     out.append(f"{'TÜMÜ':6s} " + _stats([float(r["y_ret"]) for r in rows]))
-    for key in ("organic", "manipulation", "survival"):
+    for key in ("organic", "manipulation", "survival", "smart_clusters", "mev_share"):
+        if not rows or key not in rows[0]:
+            continue
         out.append(f"\n== {key} skor dilimi (yükseldikçe getiri monoton değişiyor mu?) ==")
         srt = sorted(rows, key=lambda r: float(r[key]))
         q = max(1, len(srt) // 5)

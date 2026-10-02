@@ -74,7 +74,12 @@ def test_dataset_and_report():
     rows = {r["symbol"]: r for r in build_rows(store, cfg, T0 - 1, T0 + 1)}
     assert rows["ORG"]["decision"] == "BUY" and rows["PUMP"]["decision"] == "PASS"
     assert rows["ORG"]["y_filled"] == rows["PUMP"]["y_filled"] == 1
-    assert rows["PUMP"]["y_exit"] == "stop" and rows["PUMP"]["y_ret"] < -0.3
+    # creator cluster boşaltınca stop'u beklemeden çık
+    assert rows["PUMP"]["y_exit"] == "insider_exit" and rows["PUMP"]["y_ret"] < -0.3
+    no_watch = Config(insider_exit_frac=99)
+    plain = {r["symbol"]: r for r in build_rows(store, no_watch, T0 - 1, T0 + 1)}
+    assert plain["PUMP"]["y_exit"] == "stop"
+    assert rows["PUMP"]["y_ret"] > plain["PUMP"]["y_ret"]
     # karar anından sonraki veri özellikleri değiştirmemeli (look-ahead yok)
     assert rows["ORG"]["n_trades"] == len([t for t in organic()[1] if t.ts <= T0 + 120])
     rows = list(rows.values())
@@ -90,7 +95,7 @@ def test_engine_paper_flow():
     tok, trades, fund = organic()
     load(store, tok, trades, fund)
     eng = Engine(cfg, store, resolver=None, trade=True)
-    eng.pending_fill["ORG"] = (0.05, None)
+    eng.pending_fill["ORG"] = (0.05, None, {})
     nxt = trades[-1]
     eng._on_trade(nxt)
     assert "ORG" in eng.positions
@@ -108,6 +113,6 @@ def test_engine_prunes_idle_tokens():
     held = Trade(1, T0, "HELD", "u", True, 1, 1, 1, 1)
     fresh = Trade(2, T0 + 3500, "NEW", "u", True, 1, 1, 1, 1)
     eng.last = {"OLD": old, "HELD": held, "NEW": fresh}
-    eng.pending_fill["HELD"] = (0.05, None)
+    eng.pending_fill["HELD"] = (0.05, None, {})
     eng.prune(T0 + 3700)
     assert set(eng.last) == {"HELD", "NEW"}

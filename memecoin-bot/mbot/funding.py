@@ -70,7 +70,21 @@ class FundingResolver:
         funder, lamports = find_funder(tx, wallet)
         return Funding(wallet, funder, lamports, oldest.get("blockTime"))
 
-    async def resolve_many(self, wallets: list[str], timeout_s: float = 20) -> dict[str, Funding]:
+    async def resolve_many(self, wallets: list[str], timeout_s: float = 20,
+                           depth: int = 1, hubs: frozenset = frozenset()) -> dict[str, Funding]:
+        """Cüzdanları çöz; depth>1 ise fonlayıcılarını da (hub'lar hariç) çöz."""
+        got = await self._resolve_level(wallets, timeout_s)
+        frontier = list(wallets)
+        for _ in range(depth - 1):
+            frontier = sorted({got[w].funder for w in frontier if w in got
+                               and got[w].funder not in (None, "__deep__")
+                               and got[w].funder not in hubs})
+            if not frontier:
+                break
+            got.update(await self._resolve_level(frontier, timeout_s))
+        return got
+
+    async def _resolve_level(self, wallets: list[str], timeout_s: float) -> dict[str, Funding]:
         known = self.store.fundings(wallets)
         todo = [w for w in set(wallets) if w not in known]
 

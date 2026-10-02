@@ -10,7 +10,7 @@ Bilinen iyimserlik: geçmiş trade'ler bizim işlemimiz yokmuş gibi gerçekleş
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from . import pumpfun as pf
@@ -30,6 +30,9 @@ class Position:
     tp1_done: bool = False
     closed_ts: Optional[int] = None
     exit_reason: str = ""
+    watch: dict[str, int] = field(default_factory=dict)  # içeriden cüzdan → tuttuğu token
+    watch_total: int = 0
+    watch_sold: int = 0
 
     @property
     def pnl_sol(self) -> float:
@@ -40,9 +43,12 @@ class Position:
         return self.pnl_sol / self.cost_sol if self.cost_sol else 0.0
 
 
-def open_position(mint: str, size_sol: float, vsol: int, vtok: int, ts: int, cfg: Config) -> Position:
+def open_position(mint: str, size_sol: float, vsol: int, vtok: int, ts: int, cfg: Config,
+                  watch: Optional[dict[str, int]] = None) -> Position:
     tokens, _, _ = pf.buy_quote(int(size_sol * pf.LAMPORTS), vsol, vtok, cfg.fee_bps)
-    return Position(mint, ts, pf.price(vsol, vtok), tokens, size_sol + cfg.tx_cost_sol)
+    w = dict(watch or {})
+    return Position(mint, ts, pf.price(vsol, vtok), tokens, size_sol + cfg.tx_cost_sol,
+                    watch=w, watch_total=sum(w.values()))
 
 
 def _sell(p: Position, tokens: int, vsol: int, vtok: int, cfg: Config) -> None:
@@ -65,8 +71,15 @@ def on_trade(p: Position, t: Trade, cfg: Config) -> bool:
         return True
     mult = pf.price(t.vsol, t.vtok) / p.ref_price
     p.peak_mult = max(p.peak_mult, mult)
+    if not t.is_buy and t.user in p.watch:
+        sold = min(t.tok, p.watch[t.user])
+        p.watch[t.user] -= sold
+        p.watch_sold += sold
+    insider_out = p.watch_total > 0 and p.watch_sold >= cfg.insider_exit_frac * p.watch_total
     if mult <= 1 - cfg.stop_loss:
         close(p, t.vsol, t.vtok, t.ts, "stop", cfg)
+    elif insider_out:
+        close(p, t.vsol, t.vtok, t.ts, "insider_exit", cfg)
     elif t.ts - p.opened_ts >= cfg.time_stop_s:
         close(p, t.vsol, t.vtok, t.ts, "time", cfg)
     elif not p.tp1_done and mult >= 1 + cfg.tp1:
@@ -84,6 +97,7 @@ def simulate(
     size_sol: float,
     horizon_end_ts: int,
     cfg: Config,
+    watch: Optional[dict[str, int]] = None,
 ) -> Optional[Position]:
     """Karar anından sonraki trade akışında stratejiyi oynat (etiketleme/backtest)."""
     if cfg.latency_trades <= 0:
@@ -92,7 +106,7 @@ def simulate(
         if len(after) < cfg.latency_trades:
             return None  # kimse işlem yapmadı → dolamazdık
         fill, rest = after[cfg.latency_trades - 1], after[cfg.latency_trades :]
-    p = open_position(mint, size_sol, fill.vsol, fill.vtok, fill.ts, cfg)
+    p = open_position(mint, size_sol, fill.vsol, fill.vtok, fill.ts, cfg, watch)
     last = fill
     for t in rest:
         if t.ts > horizon_end_ts:

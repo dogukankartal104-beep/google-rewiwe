@@ -16,9 +16,12 @@ import websockets
 
 from . import pumpfun as pf
 from .config import Config
-from .features import compute_features
+from .cohort import build_cohorts
+from .features import compute_features, insider_watch
 from .funding import FundingResolver
+from .model import load_models
 from .paper import Position, close, on_trade, open_position
+from .reputation import Reputation
 from .risk import RiskManager
 from .scoring import Verdict, evaluate
 from .store import Store, Trade
@@ -31,11 +34,23 @@ class Engine:
         self.cfg, self.store, self.resolver, self.trade = cfg, store, resolver, trade
         self.risk = RiskManager(cfg)
         self.pending_eval: dict[str, int] = {}  # mint → created_ts
-        self.pending_fill: dict[str, tuple[float, Verdict]] = {}
+        self.pending_fill: dict[str, tuple[float, Verdict, dict[str, int]]] = {}
         self.positions: dict[str, tuple[Position, Verdict]] = {}
         self.last: dict[str, Trade] = {}
         self.n_events = 0
         self._last_prune = 0
+        self.models = load_models(cfg.model_dir)
+        self.rep = Reputation(cfg)
+        self._last_rep = 0
+        if self.models:
+            log.info("modeller yüklendi: %s", ", ".join(self.models))
+
+    def refresh_reputation(self, now: int) -> None:
+        n = self.rep.refresh_from_store(self.store, now)
+        self._last_rep = now
+        if n:
+            smart = sum(1 for w in self.rep.wallets if self.rep.is_smart(w))
+            log.info("itibar: +%d token, %d cüzdan, %d akıllı", n, len(self.rep.wallets), smart)
 
     # ------------------------------------------------------------- events
     def on_event(self, ev: pf.Event, slot: int, sig: str, idx: int) -> None:
@@ -59,8 +74,8 @@ class Engine:
 
     def _on_trade(self, t: Trade) -> None:
         if t.mint in self.pending_fill:  # latency: kararın ardından gelen ilk trade'de dol
-            size, verdict = self.pending_fill.pop(t.mint)
-            p = open_position(t.mint, size, t.vsol, t.vtok, t.ts, self.cfg)
+            size, verdict, watch = self.pending_fill.pop(t.mint)
+            p = open_position(t.mint, size, t.vsol, t.vtok, t.ts, self.cfg, watch)
             self.positions[t.mint] = (p, verdict)
             self.risk.on_open(t.mint, p.cost_sol)
             log.info("PAPER BUY  %s %.3f SOL ref=%.3e", t.mint, size, p.ref_price)
@@ -94,6 +109,8 @@ class Engine:
             if now - p.opened_ts >= self.cfg.time_stop_s:
                 last = self.last[mint]
                 self._finish(mint, last.vsol, last.vtok, now, "time")
+        if now - self._last_rep >= self.cfg.rep_refresh_s:
+            self.refresh_reputation(now)
         if now - self._last_prune >= 60:
             self.prune(now)
         self.store.commit()
@@ -116,19 +133,26 @@ class Engine:
                 vol[t.user] = vol.get(t.user, 0) + t.sol
         buyers = sorted(vol, key=vol.get, reverse=True)
         if self.resolver:  # RPC bütçesi: hacmin çoğunu taşıyan ilk 60 alıcı
-            fundings = await self.resolver.resolve_many(buyers[:60] + [tok.creator])
-        else:
-            fundings = self.store.fundings(buyers)
+            await self.resolver.resolve_many(buyers[:60] + [tok.creator],
+                                             depth=self.cfg.funding_depth,
+                                             hubs=frozenset(self.cfg.hubs))
+        users = {t.user for t in trades} | {tok.creator}
+        fundings = self.store.fundings_closure(users, self.cfg.funding_depth)
+        coh = build_cohorts(tok, trades, fundings, self.cfg.hubs, self.cfg.same_slot_size_tol,
+                            self.cfg.funding_depth)
         f = compute_features(tok, trades, fundings, t_d, self.cfg.hubs,
-                             self.cfg.same_slot_size_tol, self.cfg.fresh_wallet_s)
-        v = evaluate(tok, f, self.store, self.cfg)
-        log.info("%-5s %s %-10s org=%3.0f man=%3.0f surv=%3.0f eff=%d/%d  %s", v.decision, mint,
-                 tok.symbol[:10], v.organic, v.manipulation, v.survival, f["effective_buyers"],
-                 f["unique_buyers"], "; ".join(v.reasons))
+                             self.cfg.same_slot_size_tol, self.cfg.fresh_wallet_s,
+                             self.cfg.funding_depth, self.rep, coh)
+        v = evaluate(tok, f, self.store, self.cfg, self.models)
+        log.info("%-5s %s %-10s org=%3.0f man=%3.0f surv=%3.0f eff=%d/%d smart=%d mev=%.0f%% %s %s",
+                 v.decision, mint, tok.symbol[:10], v.organic, v.manipulation, v.survival,
+                 f["effective_buyers"], f["unique_buyers"], f["smart_clusters"],
+                 f["mev_share"] * 100, v.probs or "", "; ".join(v.reasons))
         if v.decision == "BUY" and self.trade:
             ok, why = self.risk.can_open(mint, int(time.time()))
             if ok:
-                self.pending_fill[mint] = (self.risk.size_sol(), v)
+                watch = insider_watch(tok, trades, coh, self.rep)
+                self.pending_fill[mint] = (self.risk.size_sol(), v, watch)
             else:
                 log.info("RISK BLOCK %s: %s", mint, why)
 
@@ -136,6 +160,7 @@ class Engine:
 async def run(cfg: Config, store: Store, trade: bool, resolve_funders: bool) -> None:
     resolver = FundingResolver(cfg.rpc_url, store, cfg.funder_max_pages) if resolve_funders else None
     engine = Engine(cfg, store, resolver, trade)
+    engine.refresh_reputation(int(time.time()))
 
     async def ticker() -> None:
         while True:

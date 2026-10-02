@@ -28,11 +28,30 @@ def main() -> None:
     r = sub.add_parser("report", help="skorlar gerçekten tahmin ediyor mu?")
     r.add_argument("--csv", default="data/dataset.csv")
 
+    t = sub.add_parser("train", help="Faz 2: win/rug/graduation modellerini walk-forward ile eğit")
+    t.add_argument("--csv", default="data/dataset.csv")
+
+    o = sub.add_parser("optimize", help="çıkış kurallarını walk-forward ile seç")
+    o.add_argument("--hours", type=float, default=168)
+    o.add_argument("--include-watch", action="store_true", help="WATCH kararlarını da aday say")
+    o.add_argument("--folds", type=int, default=4)
+
+    w = sub.add_parser("wallets", help="en yüksek itibarlı cüzdanlar")
+    w.add_argument("--top", type=int, default=25)
+
     sub.add_parser("stats", help="veritabanı özeti")
 
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
     cfg = Config.load()
+
+    if a.cmd == "train":
+        import csv
+
+        from .model import train_all
+        with open(a.csv) as fh:
+            print(train_all(list(csv.DictReader(fh)), cfg.model_dir))
+        return
 
     if a.cmd == "report":
         import csv
@@ -56,6 +75,22 @@ def main() -> None:
         rows = build_rows(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
         write_csv(rows, a.out)
         print(f"{len(rows)} satır → {a.out}")
+    elif a.cmd == "optimize":
+        from .dataset import iter_cases
+        from .optimize import walk_forward
+        now = int(time.time())
+        keep = {"BUY", "WATCH"} if a.include_watch else {"BUY"}
+        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
+                 if c.verdict.decision in keep]
+        print(walk_forward(cases, cfg, a.folds))
+    elif a.cmd == "wallets":
+        from .reputation import Reputation
+        rep = Reputation(cfg)
+        rep.refresh_from_store(store, int(time.time()))
+        print(f"{len(rep.done)} token, {len(rep.wallets)} cüzdan, ortalama getiri {rep.prior:+.1%}")
+        print(f"{'cüzdan':44s} {'token':>5s} {'skor':>7s} {'win':>6s} akıllı")
+        for wal, n, mean, win in rep.top(a.top):
+            print(f"{wal:44s} {n:5d} {mean:+7.1%} {win:6.1%} {'✓' if rep.is_smart(wal) else ''}")
     elif a.cmd == "stats":
         for t in ("tokens", "trades", "funders", "paper_trades"):
             n = store.db.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
@@ -74,7 +109,8 @@ async def _resolve(cfg: Config, store: Store, hours: float) -> None:
         for tok in store.tokens_created_between(now - int(hours * 3600), now):
             trades = store.trades(tok.mint, until_ts=tok.created_ts + cfg.decision_age_s)
             wallets = {t.user for t in trades if t.is_buy} | {tok.creator}
-            got = await res.resolve_many(sorted(wallets), timeout_s=60)
+            got = await res.resolve_many(sorted(wallets), timeout_s=60, depth=cfg.funding_depth,
+                                         hubs=frozenset(cfg.hubs))
             print(f"{tok.symbol[:12]:12s} {len(got)}/{len(wallets)} cüzdan çözüldü")
     finally:
         await res.aclose()

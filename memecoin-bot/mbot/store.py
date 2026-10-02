@@ -159,6 +159,27 @@ class Store:
                 out[r[0]] = Funding(*r)
         return out
 
+    def fundings_closure(self, wallets: Iterable[str], depth: int) -> dict[str, Funding]:
+        """Cüzdanların + (depth-1) kademe fonlayıcılarının kayıtları."""
+        out: dict[str, Funding] = {}
+        frontier = set(wallets)
+        for _ in range(max(1, depth)):
+            got = self.fundings(frontier - out.keys())
+            out.update(got)
+            frontier = {f.funder for f in got.values()
+                        if f.funder and f.funder != "__deep__"} - out.keys()
+            if not frontier:
+                break
+        return out
+
+    def tokens_ended_before(self, ts: int, horizon_s: int) -> list[Token]:
+        rows = self.db.execute(
+            "SELECT mint,name,symbol,creator,created_slot,created_ts,completed_ts FROM tokens "
+            "WHERE created_ts IS NOT NULL AND created_ts + ? <= ? ORDER BY created_ts",
+            (horizon_s, ts),
+        ).fetchall()
+        return [Token(*r) for r in rows]
+
     def creator_launches(self, creator: str, t0: int, t1: int) -> int:
         return self.db.execute(
             "SELECT COUNT(*) FROM tokens WHERE creator=? AND created_ts>=? AND created_ts<?",

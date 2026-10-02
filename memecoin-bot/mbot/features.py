@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import math
 from collections import Counter, defaultdict
+from typing import TYPE_CHECKING, Optional
 
 from . import pumpfun as pf
-from .cohort import build_cohorts
+from .cohort import Cohorts, build_cohorts
 from .store import Funding, Token, Trade
+
+if TYPE_CHECKING:
+    from .reputation import Reputation
 
 SIZE_BINS = 13  # log2(sol / 0.01 SOL), 0.01 … ~40 SOL
 
@@ -26,6 +30,76 @@ def _hhi(weights: dict[str, float]) -> float:
     return sum((w / tot) ** 2 for w in weights.values()) if tot > 0 else 1.0
 
 
+def order_slot(trades: list[Trade]) -> list[Trade]:
+    """Aynı slot + aynı mint trade'lerini gerçek yürütme sırasına diz.
+
+    Pump.fun'da buy virtual_token_reserves'i tam olarak token_amount kadar düşürür,
+    sell artırır → her trade'in ön-durumu bir öncekinin son-durumuna eşittir.
+    Zincir kurulamazsa (eksik event) gelen sıra korunur.
+    """
+    if len(trades) < 2:
+        return trades
+
+    def pre(t: Trade) -> int:
+        return t.vtok + t.tok if t.is_buy else t.vtok - t.tok
+
+    by_pre: dict[int, list[Trade]] = defaultdict(list)
+    for t in trades:
+        by_pre[pre(t)].append(t)
+    posts = {t.vtok for t in trades}
+    starts = [t for t in trades if pre(t) not in posts]
+    if len(starts) != 1:
+        return trades
+    out, used = [starts[0]], {id(starts[0])}
+    while len(out) < len(trades):
+        nxt = [t for t in by_pre.get(out[-1].vtok, []) if id(t) not in used]
+        if not nxt:
+            return trades
+        out.append(nxt[0])
+        used.add(id(nxt[0]))
+    return out
+
+
+def mev_stats(trades: list[Trade]) -> tuple[int, float, float]:
+    """(sandwich sayısı, saldırgan hacim payı, aynı-slot al-sat (wash) hacim payı)."""
+    by_slot: dict[int, list[Trade]] = defaultdict(list)
+    for t in trades:
+        by_slot[t.slot].append(t)
+    sandwiches, attacker, wash = 0, 0, 0
+    for group in by_slot.values():
+        if len(group) < 2:
+            continue
+        seq = order_slot(group)
+        flip = {t.user for t in seq if t.is_buy} & {t.user for t in seq if not t.is_buy}
+        wash += sum(t.sol for t in seq if t.user in flip)
+        for i, a in enumerate(seq):
+            if not a.is_buy:
+                continue
+            for j in range(i + 1, len(seq)):
+                c = seq[j]
+                if c.user != a.user:
+                    continue
+                if not c.is_buy:
+                    victims = [v for v in seq[i + 1 : j] if v.is_buy and v.user != a.user]
+                    if victims and abs(c.tok - a.tok) <= 0.05 * a.tok:
+                        sandwiches += 1
+                        attacker += a.sol + c.sol
+                break
+    total = sum(t.sol for t in trades) or 1
+    return sandwiches, attacker / total, wash / total
+
+
+def insider_watch(token: Token, trades: list[Trade], coh: Cohorts,
+                  rep: Optional["Reputation"] = None) -> dict[str, int]:
+    """Karar anında creator cluster'ı + akıllı cüzdanların tuttuğu tokenlar.
+    Bunlar satmaya başlarsa pozisyondan çıkılır (paper.on_trade)."""
+    hold: dict[str, int] = defaultdict(int)
+    for t in trades:
+        hold[t.user] += t.tok if t.is_buy else -t.tok
+    return {w: h for w, h in hold.items() if h > 0 and (
+        coh.cluster(w) == coh.creator_cluster or (rep is not None and rep.is_smart(w)))}
+
+
 def compute_features(
     token: Token,
     trades: list[Trade],
@@ -34,11 +108,15 @@ def compute_features(
     hubs: set[str] | None = None,
     size_tol: float = 0.15,
     fresh_wallet_s: int = 86_400,
+    depth: int = 1,
+    rep: Optional["Reputation"] = None,
+    coh: Optional[Cohorts] = None,
 ) -> dict[str, float]:
     hubs = hubs or set()
     buys = [t for t in trades if t.is_buy]
     sells = [t for t in trades if not t.is_buy]
-    coh = build_cohorts(token, trades, fundings, hubs, size_tol)
+    if coh is None:
+        coh = build_cohorts(token, trades, fundings, hubs, size_tol, depth)
 
     buy_vol = sum(t.sol for t in buys) / pf.LAMPORTS
     sell_vol = sum(t.sol for t in sells) / pf.LAMPORTS
@@ -103,6 +181,21 @@ def compute_features(
         else:
             second_half += 1
 
+    sandwiches, mev_share, wash_share = mev_stats(trades)
+
+    # itibar
+    smart_clusters = smart_share = rep_known = buyer_rep = 0.0
+    c_prev, c_rug, c_grad = 0, 0.0, 0.0
+    if rep is not None and buyers:
+        smart = {w for w in buyers if rep.is_smart(w)}
+        smart_clusters = len({coh.cluster(w) for w in smart} - {coh.creator_cluster})
+        smart_share = sum(t.sol for t in buys if t.user in smart) / pf.LAMPORTS / buy_vol
+        known_w = [w for w in buyers if w in rep.wallets]
+        rep_known = len(known_w) / len(buyers)
+        if known_w:
+            buyer_rep = sum(rep.wallet_score(w)[1] for w in known_w) / len(known_w)
+        c_prev, c_rug, c_grad = rep.creator_stats(token.creator)
+
     last = trades[-1] if trades else None
     rsol = pf.real_sol(last.vsol, last.rsol) / pf.LAMPORTS if last else 0.0
     age = max(1, now_ts - token.created_ts)
@@ -136,4 +229,14 @@ def compute_features(
         "new_buyers_per_min": len(buyers) / (age / 60),
         "price_mult": pf.price(last.vsol, last.vtok) / pf.INITIAL_PRICE if last else 1.0,
         "curve_progress": pf.curve_progress(last.vtok) if last else 0.0,
+        "mev_sandwiches": float(sandwiches),
+        "mev_share": mev_share,
+        "wash_slot_share": wash_share,
+        "smart_clusters": float(smart_clusters),
+        "smart_buy_share": smart_share,
+        "rep_known_share": rep_known,
+        "buyer_rep_mean": buyer_rep,
+        "creator_prev_tokens": float(c_prev),
+        "creator_rug_rate": c_rug,
+        "creator_grad_rate": c_grad,
     }

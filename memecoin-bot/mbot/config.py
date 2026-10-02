@@ -23,7 +23,17 @@ class Config:
     # --- cohort
     same_slot_size_tol: float = 0.15  # aynı slot + ±%15 boyut → bağla
     funder_max_pages: int = 3  # 3*1000 imzadan eski cüzdan = "köklü"
+    funding_depth: int = 2  # fonlayıcının fonlayıcısı da bağ kurar
     fresh_wallet_s: int = 86_400
+
+    # --- cüzdan itibarı (sadece ufku bitmiş tokenlardan öğrenilir)
+    rep_early_s: int = 300  # ilk 5 dakikada giren cüzdanlar puanlanır
+    rep_min_tokens: int = 5
+    rep_prior_k: float = 5.0  # az örnekli cüzdanı ortalamaya çeker
+    rep_smart_mean: float = 0.20  # shrink edilmiş ortalama getiri eşiği
+    rep_smart_winrate: float = 0.50
+    rep_refresh_s: int = 600
+    max_creator_rug_rate: float = 0.80  # en az 3 önceki tokenı varsa
 
     # --- hard filtreler
     max_bundle_share: float = 0.25
@@ -49,6 +59,12 @@ class Config:
     tp1_fraction: float = 0.5
     trailing: float = 0.25
     time_stop_s: int = 900
+    insider_exit_frac: float = 0.5  # creator/akıllı cüzdanlar elindekinin yarısını sattıysa çık
+
+    # --- ML (models/ klasöründe eğitilmiş model varsa BUY'u ek olarak kapılar)
+    model_dir: str = "models"
+    model_min_p_win: float = 0.55
+    model_max_p_rug: float = 0.35
 
     # --- risk
     equity_sol: float = 10.0

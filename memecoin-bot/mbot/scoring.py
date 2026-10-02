@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Optional
 
 from .config import Config
 from .store import Store, Token
@@ -29,11 +30,12 @@ class Verdict:
     survival: float
     decision: str  # BUY | WATCH | PASS
     reasons: list[str] = field(default_factory=list)
+    probs: dict[str, float] = field(default_factory=dict)  # eğitilmiş model çıktıları
 
     def as_dict(self) -> dict:
         return {"organic": round(self.organic, 1), "manipulation": round(self.manipulation, 1),
                 "survival": round(self.survival, 1), "decision": self.decision,
-                "reasons": self.reasons}
+                "reasons": self.reasons, **{k: round(v, 3) for k, v in self.probs.items()}}
 
 
 def hard_filter(token: Token, f: dict[str, float], store: Store | None, cfg: Config) -> list[str]:
@@ -45,6 +47,9 @@ def hard_filter(token: Token, f: dict[str, float], store: Store | None, cfg: Con
         r.append(f"launch bundle %{f['bundle_share'] * 100:.0f}")
     if f["creator_cluster_hold"] > cfg.max_creator_cluster_hold:
         r.append(f"creator cluster arzın %{f['creator_cluster_hold'] * 100:.0f}'ini tutuyor")
+    if f.get("creator_prev_tokens", 0) >= 3 and f["creator_rug_rate"] >= cfg.max_creator_rug_rate:
+        r.append(f"creator geçmişi: {int(f['creator_prev_tokens'])} tokenın "
+                 f"%{f['creator_rug_rate'] * 100:.0f}'i rug")
     if store is not None:
         n = store.creator_launches(token.creator, token.created_ts - 86_400, token.created_ts)
         if n >= cfg.max_creator_launches_24h:
@@ -56,7 +61,10 @@ def hard_filter(token: Token, f: dict[str, float], store: Store | None, cfg: Con
 
 
 def score(f: dict[str, float]) -> tuple[float, float, float]:
+    rep_on = f.get("rep_known_share", 0) > 0
     organic = _wavg([
+        *([(3, _s(f["smart_clusters"], 1.5, 0.6)), (1, _s(f["buyer_rep_mean"], 0.0, 0.15))]
+          if rep_on else []),
         (3, _s(f["effective_buyers"], 25, 8)),
         (2, 1 - f["cohesion"]),
         (1, f["size_entropy"]),
@@ -75,6 +83,9 @@ def score(f: dict[str, float]) -> tuple[float, float, float]:
         (1, f["burst_share"]),
         (1, _s(f["repeat_ratio"], 2.5, 0.6)),
         (1, f["fresh_wallet_share"]),
+        (2, _s(f.get("mev_share", 0), 0.15, 0.05)),
+        (1, f.get("wash_slot_share", 0)),
+        *([(2, f["creator_rug_rate"])] if f.get("creator_prev_tokens", 0) >= 2 else []),
     ])
     survival = _wavg([
         (2, _s(f["real_sol"], 15, 5)),
@@ -86,12 +97,18 @@ def score(f: dict[str, float]) -> tuple[float, float, float]:
     return organic, manipulation, survival
 
 
-def evaluate(token: Token, f: dict[str, float], store: Store | None, cfg: Config) -> Verdict:
+def evaluate(token: Token, f: dict[str, float], store: Store | None, cfg: Config,
+             models: Optional[dict] = None) -> Verdict:
     o, m, s = score(f)
+    probs = {f"p_{k}": mdl.predict(f) for k, mdl in (models or {}).items()}
     rejects = hard_filter(token, f, store, cfg)
     if rejects:
-        return Verdict(o, m, s, "PASS", rejects)
+        return Verdict(o, m, s, "PASS", rejects, probs)
     reasons = []
+    if "p_win" in probs and probs["p_win"] < cfg.model_min_p_win:
+        reasons.append(f"model P(kâr) düşük ({probs['p_win']:.2f})")
+    if "p_rug" in probs and probs["p_rug"] > cfg.model_max_p_rug:
+        reasons.append(f"model P(rug) yüksek ({probs['p_rug']:.2f})")
     if o < cfg.buy_min_organic:
         reasons.append(f"organik talep düşük ({o:.0f})")
     if m > cfg.buy_max_manipulation:
@@ -99,7 +116,10 @@ def evaluate(token: Token, f: dict[str, float], store: Store | None, cfg: Config
     if s < cfg.buy_min_survival:
         reasons.append(f"hayatta kalma düşük ({s:.0f})")
     if reasons:
-        return Verdict(o, m, s, "PASS", reasons)
+        return Verdict(o, m, s, "PASS", reasons, probs)
     if f["price_mult"] > cfg.max_entry_price_mult or f["curve_progress"] > cfg.max_entry_progress:
-        return Verdict(o, m, s, "WATCH", ["talep gerçek ama fiyat zaten koşmuş"])
-    return Verdict(o, m, s, "BUY", ["erken organik talep"])
+        return Verdict(o, m, s, "WATCH", ["talep gerçek ama fiyat zaten koşmuş"], probs)
+    why = ["erken organik talep"]
+    if f.get("smart_clusters", 0) >= 1:
+        why.append(f"{int(f['smart_clusters'])} akıllı cluster içeride")
+    return Verdict(o, m, s, "BUY", why, probs)

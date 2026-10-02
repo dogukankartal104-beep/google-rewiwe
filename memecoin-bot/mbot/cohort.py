@@ -1,7 +1,7 @@
 """Wallet → davranışsal cohort. 15 bağlantılı cüzdan = 1 alıcı.
 
 Bağ kuralları (union-find):
-  1. Aynı fonlayıcı (hub değilse)
+  1. Aynı fonlayıcı veya aynı ata fonlayıcı (depth kademe, hub'da zincir durur)
   2. Doğrudan fonlama: A, B'yi fonladı
   3. Launch slot'unda alım (creator ile bundle) → creator cluster'ı
   4. Aynı slot'ta ±tol boyutta alım yapan farklı cüzdanlar (bundle imzası)
@@ -50,6 +50,7 @@ def build_cohorts(
     fundings: dict[str, Funding],
     hubs: set[str],
     size_tol: float = 0.15,
+    depth: int = 1,
 ) -> Cohorts:
     uf = _UF()
     wallets = {t.user for t in trades} | {token.creator}
@@ -59,12 +60,15 @@ def build_cohorts(
     # 1 + 2: fonlama grafiği
     by_funder: dict[str, list[str]] = defaultdict(list)
     for w in wallets:
-        f = fundings.get(w)
-        if f is None or f.funder in NON_LINKING or f.funder in hubs:
-            continue
-        by_funder[f.funder].append(w)
-        if f.funder in wallets:
-            uf.union(f.funder, w)
+        cur = w
+        for _ in range(max(1, depth)):
+            f = fundings.get(cur)
+            if f is None or f.funder in NON_LINKING or f.funder in hubs or f.funder == w:
+                break
+            by_funder[f.funder].append(w)
+            if f.funder in wallets:
+                uf.union(f.funder, w)
+            cur = f.funder
     for group in by_funder.values():
         for w in group[1:]:
             uf.union(group[0], w)
