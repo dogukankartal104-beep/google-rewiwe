@@ -59,13 +59,15 @@ class RiskManager:
         return None
 
     def can_open(self, mint: str, ts: int, real_sol: float | None = None,
-                 p_win: float | None = None, payoff: float | None = None) -> tuple[bool, str]:
+                 p_win: float | None = None, payoff: float | None = None,
+                 pending: int = 0) -> tuple[bool, str]:
+        """pending: henüz dolmamış (gönderilmiş) alım emri sayısı — limite dahil."""
         h = self.halted(ts)
         if h:
             return False, h
         if mint in self.open:
             return False, "zaten pozisyon var"
-        if len(self.open) >= self.cfg.max_open:
+        if len(self.open) + pending >= self.cfg.max_open:
             return False, "max açık pozisyon"
         if self.size_sol(real_sol, p_win, payoff) <= self.cfg.tx_cost_sol * 4:
             return False, "pozisyon maliyete/likiditeye göre çok küçük"

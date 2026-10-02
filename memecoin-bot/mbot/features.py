@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Optional
 
 from . import pumpfun as pf
 from .cohort import Cohorts, build_cohorts
-from .store import Funding, Token, Trade
+from .store import Funding, Token, Trade, order_slot  # noqa: F401 (yeniden dışa aktarım)
 
 if TYPE_CHECKING:
     from .reputation import Reputation
@@ -28,36 +28,6 @@ def _entropy(counts: list[int]) -> float:
 def _hhi(weights: dict[str, float]) -> float:
     tot = sum(weights.values())
     return sum((w / tot) ** 2 for w in weights.values()) if tot > 0 else 1.0
-
-
-def order_slot(trades: list[Trade]) -> list[Trade]:
-    """Aynı slot + aynı mint trade'lerini gerçek yürütme sırasına diz.
-
-    Pump.fun'da buy virtual_token_reserves'i tam olarak token_amount kadar düşürür,
-    sell artırır → her trade'in ön-durumu bir öncekinin son-durumuna eşittir.
-    Zincir kurulamazsa (eksik event) gelen sıra korunur.
-    """
-    if len(trades) < 2:
-        return trades
-
-    def pre(t: Trade) -> int:
-        return t.vtok + t.tok if t.is_buy else t.vtok - t.tok
-
-    by_pre: dict[int, list[Trade]] = defaultdict(list)
-    for t in trades:
-        by_pre[pre(t)].append(t)
-    posts = {t.vtok for t in trades}
-    starts = [t for t in trades if pre(t) not in posts]
-    if len(starts) != 1:
-        return trades
-    out, used = [starts[0]], {id(starts[0])}
-    while len(out) < len(trades):
-        nxt = [t for t in by_pre.get(out[-1].vtok, []) if id(t) not in used]
-        if not nxt:
-            return trades
-        out.append(nxt[0])
-        used.add(id(nxt[0]))
-    return out
 
 
 def mev_stats(trades: list[Trade]) -> tuple[int, float, float]:

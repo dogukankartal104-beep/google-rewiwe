@@ -71,7 +71,8 @@ def main() -> None:
 
         from .model import train_all
         with open(a.csv) as fh:
-            print(train_all(list(csv.DictReader(fh)), cfg.model_dir))
+            print(train_all(list(csv.DictReader(fh)), cfg.model_dir,
+                            embargo_s=cfg.label_lag_s))
         return
 
     if a.cmd == "montecarlo" and a.source == "csv":
@@ -107,7 +108,7 @@ def main() -> None:
     elif a.cmd == "dataset":
         from .dataset import build_rows, write_csv
         now = int(time.time())
-        rows = build_rows(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
+        rows = build_rows(store, cfg, now - int(a.hours * 3600), now - cfg.label_lag_s)
         write_csv(rows, a.out)
         print(f"{len(rows)} satır → {a.out}")
     elif a.cmd == "optimize":
@@ -115,7 +116,7 @@ def main() -> None:
         from .optimize import walk_forward
         now = int(time.time())
         keep = {"BUY", "WATCH"} if a.include_watch else {"BUY"}
-        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
+        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.label_lag_s)
                  if c.verdict.decision in keep]
         print(walk_forward(cases, cfg, a.folds))
     elif a.cmd == "latency":
@@ -123,7 +124,7 @@ def main() -> None:
         from .optimize import latency_report
         now = int(time.time())
         keep = {"BUY", "WATCH"} if a.include_watch else {"BUY"}
-        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
+        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.label_lag_s)
                  if c.verdict.decision in keep]
         print(latency_report(cases, cfg))
     elif a.cmd == "montecarlo":
@@ -141,7 +142,7 @@ def main() -> None:
         from .dataset import iter_cases
         now = int(time.time())
         keep = {"BUY", "WATCH"} if a.include_watch else {"BUY"}
-        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.horizon_s)
+        cases = [c for c in iter_cases(store, cfg, now - int(a.hours * 3600), now - cfg.label_lag_s)
                  if c.verdict.decision in keep]
         print(cost_report(cases, cfg))
     elif a.cmd == "drift":
@@ -182,7 +183,7 @@ async def _resolve(cfg: Config, store: Store, hours: float) -> None:
     res = FundingResolver(cfg.rpc_url, store, cfg.funder_max_pages)
     try:
         for tok in store.tokens_created_between(now - int(hours * 3600), now):
-            trades = store.trades(tok.mint, until_ts=tok.created_ts + cfg.decision_age_s)
+            trades = store.trades(tok.mint, until_ts=tok.created_ts + cfg.ages[-1])
             wallets = {t.user for t in trades if t.is_buy} | {tok.creator}
             got = await res.resolve_many(sorted(wallets), timeout_s=60, depth=cfg.funding_depth,
                                          hubs=frozenset(cfg.hubs))

@@ -220,11 +220,14 @@ class Engine:
                  f["unique_buyers"], f["smart_clusters"], f["mev_share"] * 100, v.probs or "",
                  "; ".join(v.reasons))
         if v.decision == "BUY":
+            if mint in self.entered:  # eşzamanlı başka değerlendirme (cp + smart) zaten girdi
+                return v
             self.entered.add(mint)
         if v.decision == "BUY" and self.trade:
             p_win = v.probs.get("p_win")
             payoff = self.models["win"].meta.get("payoff") if "win" in self.models else None
-            ok, why = self.risk.can_open(mint, int(time.time()), f["real_sol"], p_win, payoff)
+            ok, why = self.risk.can_open(mint, int(time.time()), f["real_sol"], p_win, payoff,
+                                         pending=len(self.pending_fill))
             if ok:
                 watch = insider_watch(tok, trades, coh, self.rep)
                 size = self.risk.size_sol(f["real_sol"], p_win, payoff)

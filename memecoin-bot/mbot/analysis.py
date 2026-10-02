@@ -134,7 +134,7 @@ def drift(store: Store, cfg: Config, hours: float = 48, now: Optional[int] = Non
     models = load_models(cfg.model_dir)
     if not models:
         return DriftResult(False, "Eğitilmiş model yok (önce `train`).")
-    rows = build_rows(store, cfg, now - int(hours * 3600), now - cfg.horizon_s)
+    rows = build_rows(store, cfg, now - int(hours * 3600), now - cfg.label_lag_s)
     if len(rows) < 50:
         return DriftResult(False, f"Son {hours:.0f} saatte {len(rows)} etiketli token var; "
                                   "drift için en az 50 gerekli.")
@@ -178,7 +178,7 @@ def golive(store: Store, cfg: Config, hours: float = 168, now: Optional[int] = N
     checks.append((n_paper >= cfg.golive_min_paper, "Paper işlem sayısı",
                    f"{n_paper} / en az {cfg.golive_min_paper}"))
 
-    cases = [c for c in iter_cases(store, cfg, now - int(hours * 3600), now - cfg.horizon_s)
+    cases = [c for c in iter_cases(store, cfg, now - int(hours * 3600), now - cfg.label_lag_s)
              if c.verdict.decision == "BUY"]
     if len(cases) >= 30:
         base = objective(returns(cases, cfg))

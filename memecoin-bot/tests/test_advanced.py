@@ -133,7 +133,7 @@ def _rows(n=600, seed=0):
         a, b = rnd.gauss(0, 1), rnd.gauss(0, 1)
         win = rnd.random() < 1 / (1 + 2.718 ** -(2 * a))
         rug = rnd.random() < 1 / (1 + 2.718 ** -(2 * b - 1))
-        rows.append({"mint": f"m{i}", "created_ts": str(T0 + i), "sig_a": a, "sig_b": b,
+        rows.append({"mint": f"m{i}", "created_ts": str(T0 + i * 600), "sig_a": a, "sig_b": b,
                      "noise": rnd.random(), "decision": "BUY",
                      "y_ret": 0.3 if win else -0.3, "y_rug": int(rug), "y_graduated": 0})
     return rows

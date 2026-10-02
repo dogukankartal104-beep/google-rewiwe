@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
@@ -75,6 +75,36 @@ class Funding:
     funder: Optional[str]  # None = bulunamadı, "__deep__" = çok eski/aktif cüzdan
     lamports: int
     first_ts: Optional[int]
+
+
+def order_slot(trades: list[Trade]) -> list[Trade]:
+    """Aynı slot + aynı mint trade'lerini gerçek yürütme sırasına diz.
+
+    Pump.fun'da buy virtual_token_reserves'i tam olarak token_amount kadar düşürür,
+    sell artırır → her trade'in ön-durumu bir öncekinin son-durumuna eşittir.
+    Zincir kurulamazsa (eksik event) gelen sıra korunur.
+    """
+    if len(trades) < 2:
+        return trades
+
+    def pre(t: Trade) -> int:
+        return t.vtok + t.tok if t.is_buy else t.vtok - t.tok
+
+    by_pre: dict[int, list[Trade]] = defaultdict(list)
+    for t in trades:
+        by_pre[pre(t)].append(t)
+    posts = {t.vtok for t in trades}
+    starts = [t for t in trades if pre(t) not in posts]
+    if len(starts) != 1:
+        return trades
+    out, used = [starts[0]], {id(starts[0])}
+    while len(out) < len(trades):
+        nxt = [t for t in by_pre.get(out[-1].vtok, []) if id(t) not in used]
+        if not nxt:
+            return trades
+        out.append(nxt[0])
+        used.add(id(nxt[0]))
+    return out
 
 
 def sig_hash(sig: str) -> int:
@@ -209,8 +239,18 @@ class Store:
             q += " AND t.ts <= ?"
             args.append(until_ts)
         q += " ORDER BY t.slot, t.sig_h, t.idx"
-        return [Trade(r[0], r[1], mint, r[2], bool(r[3]), r[4], r[5], r[6], r[7], r[8],
+        rows = [Trade(r[0], r[1], mint, r[2], bool(r[3]), r[4], r[5], r[6], r[7], r[8],
                       str(r[9]), r[10]) for r in self.db.execute(q, args)]
+        # aynı slot içindeki sıra imza özetine göre rastgele → rezerv zinciriyle gerçek sıra
+        out: list[Trade] = []
+        i = 0
+        while i < len(rows):
+            j = i + 1
+            while j < len(rows) and rows[j].slot == rows[i].slot:
+                j += 1
+            out.extend(order_slot(rows[i:j]) if j - i > 1 else rows[i:j])
+            i = j
+        return out
 
     def n_trades(self) -> int:
         return self.db.execute("SELECT COUNT(*) FROM trades").fetchone()[0]

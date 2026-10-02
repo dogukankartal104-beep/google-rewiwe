@@ -98,6 +98,11 @@ class Config:
     hubs: set[str] = field(default_factory=set)
 
     @property
+    def label_lag_s(self) -> int:
+        """Bir tokenın tüm etiketleri kesinleşene kadar geçmesi gereken süre."""
+        return self.ages[-1] + self.horizon_s
+
+    @property
     def ages(self) -> list[int]:
         a = sorted({int(x) for x in self.decision_ages.split(",") if x.strip()})
         return a or [self.decision_age_s]

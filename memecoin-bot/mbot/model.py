@@ -25,18 +25,24 @@ TARGETS = {
 }
 
 
-def feature_keys(row: dict) -> list[str]:
-    stop = {"organic", "manipulation", "survival", "created_ts"}
-    keys = []
-    for k, v in row.items():
-        if k in EXCLUDE or k in stop or k.startswith("y_"):
-            continue
-        try:
-            float(v)
-        except (TypeError, ValueError):
-            continue
-        keys.append(k)
-    return keys
+TEXT_COLS = {"mint", "symbol", "reasons", "decision", "trigger"}
+
+
+def _num(v) -> bool:
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return False
+    return x == x and abs(x) != float("inf")
+
+
+def feature_keys(rows: list[dict] | dict) -> list[str]:
+    """Tüm satırlarda sayısal olan sütunlar (tek satıra bakmak "420" sembolünü özellik
+    sanar)."""
+    rows = [rows] if isinstance(rows, dict) else rows
+    stop = {"organic", "manipulation", "survival", "created_ts"} | TEXT_COLS
+    keys = [k for k in rows[0] if k not in EXCLUDE and k not in stop and not k.startswith("y_")]
+    return [k for k in keys if all(_num(r.get(k)) for r in rows)]
 
 
 class LogisticModel:
@@ -133,14 +139,24 @@ def _when(r: dict) -> int:
     return int(float(r.get("decision_ts") or r["created_ts"]))
 
 
-def walk_forward(rows: list[dict], target: str, folds: int = 5, l2: float = 1.0) -> list[dict]:
+def walk_forward(rows: list[dict], target: str, folds: int = 5, l2: float = 1.0,
+                 embargo_s: int = 2400) -> list[dict]:
+    """Geçmişle eğit → gelecekte test. Sızıntıya karşı: eğitim satırının etiketi test
+    başlamadan bitmiş olmalı (embargo = son karar anı + ufuk) ve test diliminde de
+    bulunan tokenların satırları eğitimden çıkarılır."""
     rows = sorted(rows, key=_when)
-    keys = feature_keys(rows[0])
+    keys = feature_keys(rows)
     lab = TARGETS[target]
     size = len(rows) // (folds + 1)
     out = []
     for k in range(1, folds + 1):
-        train, test = rows[: k * size], rows[k * size : (k + 1) * size]
+        test = rows[k * size : (k + 1) * size]
+        if not test:
+            continue
+        t_start = _when(test[0])
+        test_mints = {r.get("mint") for r in test}
+        train = [r for r in rows[: k * size]
+                 if _when(r) + embargo_s <= t_start and r.get("mint") not in test_mints]
         test = [r for r in test if lab(r) is not None]
         if len(train) < 50 or len(test) < 20:
             continue
@@ -164,13 +180,14 @@ def walk_forward(rows: list[dict], target: str, folds: int = 5, l2: float = 1.0)
     return out
 
 
-def train_all(rows: list[dict], out_dir: str, min_rows: int = 200) -> str:
+def train_all(rows: list[dict], out_dir: str, min_rows: int = 200,
+              embargo_s: int = 2400) -> str:
     lines = []
     if len(rows) < min_rows:
         return f"Sadece {len(rows)} satır var; en az {min_rows} gerekli. Önce daha fazla veri topla."
-    keys = feature_keys(rows[0])
+    keys = feature_keys(rows)
     for target in TARGETS:
-        wf = walk_forward(rows, target)
+        wf = walk_forward(rows, target, embargo_s=embargo_s)
         lines.append(f"\n== {target} (walk-forward, geçmişle eğit → gelecekte test) ==")
         for r in wf:
             lines.append(f"fold {r['fold']}: train={r['train']:5d} test={r['test']:4d} "
