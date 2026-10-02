@@ -104,3 +104,24 @@ def load(store: Store, tok: Token, trades: list[Trade], fund: dict[str, Funding]
     for f in fund.values():
         store.put_funding(f, T0)
     store.commit()
+
+
+def late_bloomer(mint: str = "LATE", seed: int = 7) -> tuple[Token, list[Trade], dict[str, Funding]]:
+    """İlk 2 dakikada sessiz, 5. dakikaya doğru organik talep alan token."""
+    rnd = random.Random(seed)
+    tok = Token(mint, "Late Bloom", "LATE", "creatorL", SLOT0, T0)
+    orders = [(SLOT0, T0, "creatorL", True, 0.3)]
+    fund = {"creatorL": Funding("creatorL", "__deep__", 0, T0 - 90 * 86_400)}
+    for i in range(6):
+        slot = SLOT0 + 20 + i * 40
+        orders.append((slot, T0 + (slot - SLOT0) * 2 // 5, f"e{i}", True, 0.2))
+        fund[f"e{i}"] = Funding(f"e{i}", f"ef{i}", 1, T0 - 50 * 86_400)
+    for i in range(60):
+        slot = SLOT0 + 330 + int(rnd.random() * 400)
+        w = f"l{i}"
+        orders.append((slot, T0 + (slot - SLOT0) * 2 // 5, w, True, round(rnd.lognormvariate(-1.6, 0.8), 3)))
+        fund[w] = Funding(w, f"lf{i}" if i % 3 else "__deep__", 1, T0 - rnd.randint(3, 300) * 86_400)
+    for i in range(20):
+        slot = SLOT0 + 800 + i * 30
+        orders.append((slot, T0 + (slot - SLOT0) * 2 // 5, f"z{i}", True, 0.3))
+    return tok, run_curve(mint, orders), fund

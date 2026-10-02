@@ -16,7 +16,11 @@ class Config:
     hubs_file: str = "hubs.txt"  # CEX hot wallet vb. — fonlama bağı kurmaz
 
     # --- karar zamanı / etiket
-    decision_age_s: int = 120  # token yaşı bu saniyeye gelince bir kez değerlendir
+    decision_age_s: int = 120  # decision_ages boşsa tek karar anı
+    decision_ages: str = "60,120,300,600"  # bu yaşlarda yeniden değerlendir, ilk BUY'da gir
+    smart_trigger: int = 1  # akıllı cüzdan alım yapınca hemen değerlendir
+    smart_trigger_min_age_s: int = 15
+    eval_cooldown_s: int = 30  # aynı token için iki değerlendirme arası en az
     horizon_s: int = 1800  # etiket ufku
     min_trades: int = 15
 
@@ -34,6 +38,7 @@ class Config:
     rep_smart_winrate: float = 0.50
     rep_refresh_s: int = 600
     max_creator_rug_rate: float = 0.80  # en az 3 önceki tokenı varsa
+    narrative_window_s: int = 21_600  # anlatı (isim kelimesi) sıcaklığı penceresi: 6 saat
 
     # --- piyasa rejimi: son pencerede ufku biten tokenların rug oranı
     regime_window_s: int = 3600
@@ -66,6 +71,9 @@ class Config:
     trailing: float = 0.25
     time_stop_s: int = 900
     insider_exit_frac: float = 0.5  # creator/akıllı cüzdanlar elindekinin yarısını sattıysa çık
+    rescore_s: int = 60  # açık pozisyonu bu aralıkla yeniden skorla
+    rescore_exit_organic: float = 40  # organik talep bunun altına düşerse çık
+    rescore_exit_manip: float = 65  # manipülasyon bunun üstüne çıkarsa çık
 
     # --- ML (models/ klasöründe eğitilmiş model varsa BUY'u ek olarak kapılar)
     model_dir: str = "models"
@@ -77,6 +85,8 @@ class Config:
     risk_per_trade: float = 0.005  # equity'nin %0.5'i
     max_open: int = 5
     max_liq_frac: float = 0.02  # pozisyon ≤ curve'deki SOL'ün %2'si (çıkış likiditesi)
+    kelly_fraction: float = 0.25  # model varsa: boyut = equity × kelly × bu kesir
+    max_risk_per_trade: float = 0.02  # güvenli bile olsa tek işlemde en fazla %2
     daily_loss_limit: float = 0.03
     max_consecutive_losses: int = 8
 
@@ -86,6 +96,11 @@ class Config:
     golive_max_dd: float = 0.20
 
     hubs: set[str] = field(default_factory=set)
+
+    @property
+    def ages(self) -> list[int]:
+        a = sorted({int(x) for x in self.decision_ages.split(",") if x.strip()})
+        return a or [self.decision_age_s]
 
     @classmethod
     def load(cls) -> "Config":

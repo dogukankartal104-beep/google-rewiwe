@@ -80,7 +80,8 @@ def main() -> None:
         from .montecarlo import report as mc_report
         with open(a.csv) as fh:
             rows = [r for r in csv.DictReader(fh)
-                    if r["decision"] == "BUY" and str(r["y_ret"]) != ""]
+                    if r["decision"] == "BUY" and str(r["y_ret"]) != ""
+                    and str(r.get("final", "1")) == "1"]
         rets = [float(r["y_ret"]) for r in rows]
         ts = [int(float(r["created_ts"])) for r in rows]
         print(mc_report(rets, _per_period(ts, a.days), cfg.risk_per_trade, a.max_dd, a.sims,

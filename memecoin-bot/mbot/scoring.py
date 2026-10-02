@@ -75,6 +75,7 @@ def score(f: dict[str, float]) -> tuple[float, float, float]:
         (1, 1 - f["fresh_wallet_share"]),
         (1, _s(f["buyer_accel"], 1.0, 0.3)),
         (1, 1 - f["round_trip_share"]),
+        *([(1, _s(f["narrative_grad_rate"], 0.08, 0.03))] if f.get("narrative_n", 0) >= 5 else []),
     ])
     manipulation = _wavg([
         (3, f["cohesion"]),

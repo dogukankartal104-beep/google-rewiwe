@@ -187,8 +187,11 @@ def compute_features(
     smart_clusters = smart_share = rep_known = buyer_rep = 0.0
     c_prev, c_rug, c_grad = 0, 0.0, 0.0
     reg_n, reg_rug, reg_grad = 0, 0.0, 0.0
+    nar_n, nar_grad, nar_ret = 0, 0.0, 0.0
     if rep is not None:
+        from .reputation import name_words
         reg_n, reg_rug, reg_grad = rep.regime(now_ts)
+        nar_n, nar_grad, nar_ret = rep.narrative(name_words(token.name, token.symbol), now_ts)
     if rep is not None and buyers:
         smart = {w for w in buyers if rep.is_smart(w)}
         smart_clusters = len({coh.cluster(w) for w in smart} - {coh.creator_cluster})
@@ -245,4 +248,7 @@ def compute_features(
         "regime_n": float(reg_n),
         "regime_rug_rate": reg_rug,
         "regime_grad_rate": reg_grad,
+        "narrative_n": float(nar_n),
+        "narrative_grad_rate": nar_grad,
+        "narrative_ret": nar_ret,
     }

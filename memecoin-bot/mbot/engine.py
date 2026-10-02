@@ -23,7 +23,7 @@ from .model import load_models
 from .paper import Position, close, expected_tokens, on_trade, open_position
 from .reputation import Reputation
 from .risk import RiskManager
-from .scoring import Verdict, evaluate
+from .scoring import Verdict, evaluate, score
 from .store import Store, Trade
 
 log = logging.getLogger("mbot")
@@ -33,7 +33,11 @@ class Engine:
     def __init__(self, cfg: Config, store: Store, resolver: Optional[FundingResolver], trade: bool):
         self.cfg, self.store, self.resolver, self.trade = cfg, store, resolver, trade
         self.risk = RiskManager(cfg)
-        self.pending_eval: dict[str, int] = {}  # mint → created_ts
+        self.pending_eval: dict[str, list[int]] = {}  # mint → [created_ts, sıradaki karar anı]
+        self.entered: set[str] = set()  # BUY kararı verilmiş tokenlar (bir daha girme)
+        self.last_eval: dict[str, int] = {}
+        self.meta: dict[str, dict] = {}  # mint → karar anı bilgisi (reconcile için)
+        self._last_rescore: dict[str, int] = {}
         # mint → (boyut, karar, insider watch, karar anında beklenen token)
         self.pending_fill: dict[str, tuple[float, Verdict, dict[str, int], int]] = {}
         self.positions: dict[str, tuple[Position, Verdict]] = {}
@@ -62,16 +66,39 @@ class Engine:
             if cts is None:  # eski layout: timestamp yok → duvar saati
                 cts = int(time.time())
                 self.store.fill_created_ts(ev.mint, cts)
-            self.pending_eval[ev.mint] = cts
+            self.pending_eval[ev.mint] = [cts, 0]
         elif isinstance(ev, pf.TradeEvent):
             t = Trade(slot, ev.timestamp, ev.mint, ev.user, ev.is_buy, ev.sol_amount,
                       ev.token_amount, ev.virtual_sol_reserves, ev.virtual_token_reserves,
                       ev.real_sol_reserves, sig, idx)
             self.last[ev.mint] = t
             self._on_trade(t)
+            self._maybe_smart_trigger(t)
         elif isinstance(ev, pf.CompleteEvent) and ev.mint in self.positions:
             last = self.last[ev.mint]
             self._finish(ev.mint, last.vsol, last.vtok, ev.timestamp, "graduated")
+
+    def _maybe_smart_trigger(self, t: Trade) -> None:
+        """Kanıtlanmış akıllı cüzdan alım yaptıysa sıradaki karar anını beklemeden değerlendir."""
+        if not (self.cfg.smart_trigger and t.is_buy and t.mint in self.pending_eval):
+            return
+        if t.mint in self.entered or t.mint in self.positions or t.mint in self.pending_fill:
+            return
+        cts = self.pending_eval[t.mint][0]
+        age = t.ts - cts
+        if not (self.cfg.smart_trigger_min_age_s <= age < self.cfg.ages[-1]):
+            return
+        if t.ts - self.last_eval.get(t.mint, -10**12) < self.cfg.eval_cooldown_s:
+            return
+        if not self.rep.is_smart(t.user):
+            return
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self.last_eval[t.mint] = t.ts
+        log.info("SMART     %s akıllı cüzdan %s… aldı, değerlendiriliyor", t.mint, t.user[:6])
+        asyncio.create_task(self._evaluate(t.mint, t.ts, "smart"))
 
     def _on_trade(self, t: Trade) -> None:
         if t.mint in self.pending_fill:  # latency: kararın ardından gelen ilk trade'de dol
@@ -97,22 +124,43 @@ class Engine:
     def _record(self, mint: str) -> None:
         p, v = self.positions.pop(mint)
         self.risk.on_close(mint, p.pnl_sol, p.closed_ts or int(time.time()))
+        info = {**v.as_dict(), **self.meta.pop(mint, {})}
+        self._last_rescore.pop(mint, None)
         self.store.add_paper_trade(mint, p.opened_ts, p.closed_ts, p.cost_sol, p.proceeds_sol,
-                                   p.exit_reason, json.dumps(v.as_dict(), ensure_ascii=False))
+                                   p.exit_reason, json.dumps(info, ensure_ascii=False))
         log.info("PAPER EXIT %s %s pnl=%+.4f SOL (%+.1f%%) equity=%.3f", mint, p.exit_reason,
                  p.pnl_sol, p.ret * 100, self.risk.equity)
 
     # ------------------------------------------------------------- timer
     async def tick(self) -> None:
         now = int(time.time())
-        for mint, cts in list(self.pending_eval.items()):
-            if now >= cts + self.cfg.decision_age_s:
+        ages = self.cfg.ages
+        for mint, st in list(self.pending_eval.items()):
+            if mint in self.entered:
                 del self.pending_eval[mint]
-                asyncio.create_task(self._evaluate(mint, cts + self.cfg.decision_age_s))
+                continue
+            cts, i = st
+            if now < cts + ages[i]:
+                continue
+            st[1] += 1
+            due = now - self.last_eval.get(mint, -10**12) >= self.cfg.eval_cooldown_s
+            if st[1] >= len(ages):  # son karar anı
+                del self.pending_eval[mint]
+                self.last_eval.pop(mint, None)
+            elif due:
+                self.last_eval[mint] = now
+            if due:
+                asyncio.create_task(self._evaluate(mint, cts + ages[i], "cp"))
         for mint, (p, _) in list(self.positions.items()):
             if now - p.opened_ts >= self.cfg.time_stop_s:
                 last = self.last[mint]
                 self._finish(mint, last.vsol, last.vtok, now, "time")
+            elif (now - p.opened_ts >= self.cfg.rescore_s
+                  and now - self._last_rescore.get(mint, 0) >= self.cfg.rescore_s):
+                self._last_rescore[mint] = now
+                if self.rescore_says_exit(mint, now):
+                    last = self.last[mint]
+                    self._finish(mint, last.vsol, last.vtok, now, "rescore_exit")
         if now - self._last_rep >= self.cfg.rep_refresh_s:
             self.refresh_reputation(now)
         if now - self._last_prune >= 60:
@@ -126,11 +174,29 @@ class Engine:
         for mint in [m for m, t in self.last.items() if t.ts < now - idle_s and m not in keep]:
             del self.last[mint]
 
-    async def _evaluate(self, mint: str, t_d: int) -> None:
+    def rescore_says_exit(self, mint: str, now: int) -> bool:
+        """Açık pozisyonu yeniden skorla (backtest'teki make_rescorer ile aynı kural)."""
+        tok = self.store.token(mint)
+        trades = self.store.trades(mint, until_ts=now)
+        if tok is None or not trades:
+            return False
+        users = {t.user for t in trades} | {tok.creator}
+        fund = self.store.fundings_closure(users, self.cfg.funding_depth)
+        f = compute_features(tok, trades, fund, now, self.cfg.hubs, self.cfg.same_slot_size_tol,
+                             self.cfg.fresh_wallet_s, self.cfg.funding_depth)
+        o, m, _ = score(f)
+        if o < self.cfg.rescore_exit_organic or m > self.cfg.rescore_exit_manip:
+            log.info("RESCORE   %s org=%.0f man=%.0f → çık", mint, o, m)
+            return True
+        return False
+
+    async def _evaluate(self, mint: str, t_d: int, trigger: str = "cp") -> Optional[Verdict]:
+        if mint in self.entered:
+            return None
         tok = self.store.token(mint)
         trades = self.store.trades(mint, until_ts=t_d)
         if tok is None or len(trades) < self.cfg.min_trades:
-            return
+            return None
         vol: dict[str, int] = {}
         for t in trades:
             if t.is_buy:
@@ -148,20 +214,27 @@ class Engine:
                              self.cfg.same_slot_size_tol, self.cfg.fresh_wallet_s,
                              self.cfg.funding_depth, self.rep, coh)
         v = evaluate(tok, f, self.store, self.cfg, self.models)
-        log.info("%-5s %s %-10s org=%3.0f man=%3.0f surv=%3.0f eff=%d/%d smart=%d mev=%.0f%% %s %s",
-                 v.decision, mint, tok.symbol[:10], v.organic, v.manipulation, v.survival,
-                 f["effective_buyers"], f["unique_buyers"], f["smart_clusters"],
-                 f["mev_share"] * 100, v.probs or "", "; ".join(v.reasons))
+        log.info("%-5s %s %-10s %4ds/%-5s org=%3.0f man=%3.0f surv=%3.0f eff=%d/%d smart=%d "
+                 "mev=%.0f%% %s %s", v.decision, mint, tok.symbol[:10], t_d - tok.created_ts,
+                 trigger, v.organic, v.manipulation, v.survival, f["effective_buyers"],
+                 f["unique_buyers"], f["smart_clusters"], f["mev_share"] * 100, v.probs or "",
+                 "; ".join(v.reasons))
+        if v.decision == "BUY":
+            self.entered.add(mint)
         if v.decision == "BUY" and self.trade:
-            ok, why = self.risk.can_open(mint, int(time.time()), f["real_sol"])
+            p_win = v.probs.get("p_win")
+            payoff = self.models["win"].meta.get("payoff") if "win" in self.models else None
+            ok, why = self.risk.can_open(mint, int(time.time()), f["real_sol"], p_win, payoff)
             if ok:
                 watch = insider_watch(tok, trades, coh, self.rep)
-                size = self.risk.size_sol(f["real_sol"])
+                size = self.risk.size_sol(f["real_sol"], p_win, payoff)
                 last = trades[-1]
+                self.meta[mint] = {"t_d": t_d, "trigger": trigger, "size": round(size, 4)}
                 self.pending_fill[mint] = (size, v, watch,
                                            expected_tokens(size, last.vsol, last.vtok, self.cfg))
             else:
                 log.info("RISK BLOCK %s: %s", mint, why)
+        return v
 
 
 async def run(cfg: Config, store: Store, trade: bool, resolve_funders: bool) -> None:

@@ -35,7 +35,8 @@ def returns(cases: list[Case], cfg: Config) -> list[float]:
     out = []
     for c in cases:
         size = position_size(cfg.equity_sol, cfg, c.f["real_sol"])
-        p = simulate(c.tok.mint, c.decision_trade, c.after, size, c.end_ts, cfg, c.watch)
+        p = simulate(c.tok.mint, c.decision_trade, c.after, size, c.end_ts, cfg, c.watch,
+                     c.rescore)
         if p is not None:
             out.append(p.ret)
     return out

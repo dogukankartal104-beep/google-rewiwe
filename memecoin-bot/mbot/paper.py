@@ -11,7 +11,7 @@ Bilinen iyimserlik: geçmiş trade'ler bizim işlemimiz yokmuş gibi gerçekleş
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Callable, Optional
 
 from . import pumpfun as pf
 from .config import Config
@@ -110,6 +110,7 @@ def simulate(
     horizon_end_ts: int,
     cfg: Config,
     watch: Optional[dict[str, int]] = None,
+    rescore: Optional[Callable[[int], bool]] = None,
 ) -> Optional[Position]:
     """Karar anından sonraki trade akışında stratejiyi oynat (etiketleme/backtest)."""
     if cfg.latency_trades <= 0:
@@ -127,6 +128,9 @@ def simulate(
             break
         last = t
         if on_trade(p, t, cfg):
+            return p
+        if rescore is not None and rescore(t.ts):  # talep çöktü / manipülasyon fırladı
+            close(p, t.vsol, t.vtok, t.ts, "rescore_exit", cfg)
             return p
     close(p, last.vsol, last.vtok, last.ts, "horizon", cfg)
     return p

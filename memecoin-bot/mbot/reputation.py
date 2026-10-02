@@ -11,12 +11,23 @@ Skor = Bayes shrink: (Σr + prior·k) / (n + k) — 2 şanslı işlem cüzdanı 
 from __future__ import annotations
 
 import heapq
-from collections import deque
+import re
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
 from . import pumpfun as pf
 from .config import Config
 from .store import Store, Token, Trade
+
+
+STOPWORDS = {"the", "coin", "token", "sol", "solana", "pump", "fun", "and", "for", "official",
+             "new", "first", "real", "meme", "inu"}
+
+
+def name_words(name: str, symbol: str) -> frozenset[str]:
+    """Anlatı anahtar kelimeleri: isim + sembolden 3+ harfli küçük harf kelimeler."""
+    text = f"{name or ''} {symbol or ''}".lower()
+    return frozenset(w for w in re.findall(r"[a-z0-9]{3,}", text) if w not in STOPWORDS)
 
 
 @dataclass
@@ -27,6 +38,7 @@ class TokenOutcome:
     wallet_ret: dict[str, float]
     rugged: bool
     graduated: bool
+    words: frozenset = frozenset()
 
 
 def token_outcome(tok: Token, trades: list[Trade], cfg: Config) -> TokenOutcome:
@@ -65,7 +77,8 @@ def token_outcome(tok: Token, trades: list[Trade], cfg: Config) -> TokenOutcome:
         peak_i = max(range(len(prices)), key=prices.__getitem__)
         rugged = min(prices[peak_i:]) <= 0.2 * prices[peak_i]
     graduated = tok.completed_ts is not None and tok.completed_ts <= end
-    return TokenOutcome(tok.mint, tok.creator, end, rets, rugged, graduated)
+    return TokenOutcome(tok.mint, tok.creator, end, rets, rugged, graduated,
+                        name_words(tok.name, tok.symbol))
 
 
 @dataclass
@@ -79,6 +92,7 @@ class Reputation:
     prior: float = 0.0  # tüm cüzdanların ortalama getirisi (shrink hedefi)
     _tot: list = field(default_factory=lambda: [0, 0.0])
     _recent: deque = field(default_factory=deque)  # (end_ts, rugged, graduated)
+    _words: dict = field(default_factory=lambda: defaultdict(deque))  # kelime → (end, grad, ret)
 
     # ------------------------------------------------------------ biriktirme
     def add(self, o: TokenOutcome) -> None:
@@ -97,6 +111,9 @@ class Reputation:
         c[1] += o.rugged
         c[2] += o.graduated
         self._recent.append((o.end_ts, o.rugged, o.graduated))
+        early = sum(o.wallet_ret.values()) / len(o.wallet_ret) if o.wallet_ret else 0.0
+        for w in o.words:
+            self._words[w].append((o.end_ts, o.graduated, early))
         self.prior = self._tot[1] / self._tot[0] if self._tot[0] else 0.0
 
     def defer(self, o: TokenOutcome) -> None:
@@ -146,6 +163,23 @@ class Reputation:
         if not win:
             return 0, 0.0, 0.0
         return len(win), sum(r[1] for r in win) / len(win), sum(r[2] for r in win) / len(win)
+
+    def narrative(self, words: frozenset, now_ts: int, min_n: int = 5) -> tuple[int, float, float]:
+        """İsmi aynı kelimeyi taşıyan, son pencerede ufku biten tokenlar içinde en kalabalık
+        kelimenin (sayı, graduation oranı, erken alıcı ort. getirisi).
+        Sorgular zaman sıralı yapılmalı: pencereden çıkan kayıtlar kalıcı silinir."""
+        lo = now_ts - self.cfg.narrative_window_s
+        best = (0, 0.0, 0.0)
+        for w in words:
+            dq = self._words.get(w)
+            if not dq:
+                continue
+            while dq and dq[0][0] < lo:
+                dq.popleft()
+            n = len(dq)
+            if n >= min_n and n > best[0]:
+                best = (n, sum(x[1] for x in dq) / n, sum(x[2] for x in dq) / n)
+        return best
 
     def top(self, n: int = 20) -> list[tuple[str, int, float, float]]:
         rows = [(w, *self.wallet_score(w)) for w, s in self.wallets.items()

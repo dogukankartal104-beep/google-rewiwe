@@ -48,7 +48,7 @@ WebSocket (logsSubscribe: pump.fun programı)
 cd memecoin-bot
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'      # numpy sadece `train` için gerekli
-pytest                       # 39 test, sentetik organik vs manipüle senaryolar
+pytest                       # 48 test, sentetik organik vs manipüle senaryolar
 ```
 
 Public Solana RPC rate-limit'lidir ve log'ları düşürür. Ciddi kullanım için
@@ -65,6 +65,21 @@ Her ayar `mbot/config.py` içinde; `MBOT_<ALAN_ADI>` ile override edilir
 `hubs.txt`: CEX hot wallet'ları gibi binlerce bağımsız kullanıcıyı fonlayan
 adresler. Buradaki adresler üzerinden cüzdanlar **birbirine bağlanmaz**.
 `hubs.example.txt` dosyasını kopyalayıp kendi doğruladığın adreslerle doldur.
+
+## Kâr motoru
+
+| Özellik | Ne yapar | Ayar |
+|---|---|---|
+| Çoklu karar anı | Token 60/120/300/600. saniyelerde yeniden değerlendirilir, **ilk BUY'da** girilir (sonradan ısınan tokenlar kaçmaz) | `MBOT_DECISION_AGES` |
+| Akıllı cüzdan tetiği | Kanıtlanmış akıllı cüzdan alım yaptığı an değerlendirme (30 sn cooldown) | `MBOT_SMART_TRIGGER` |
+| Güvene göre boyut | Model varsa ¼ Kelly: `p − (1−p)/b`, [%0.25, %2] aralığında, likidite tavanı korunur. `train` bunun düz boyuttan iyi olup olmadığını her foldda raporlar | `MBOT_KELLY_FRACTION` (0 = kapalı) |
+| Yeniden skorlama çıkışı | Açık pozisyon dakikada bir yeniden skorlanır; organik < 40 veya manipülasyon > 65 → çık | `MBOT_RESCORE_*` |
+| Anlatı sıcaklığı | İsmindeki kelimeyi taşıyan, son 6 saatte biten tokenların graduation oranı | `MBOT_NARRATIVE_WINDOW_S` |
+
+Backtest olay sıralıdır: karar anları, akıllı cüzdan alımları ve itibar güncellemeleri tek
+zaman çizelgesinde işlenir; hiçbir karar o anda bilinmeyen bir sonucu görmez.
+`dataset` CSV'si tüm değerlendirmeleri içerir (`train` hepsini kullanır); `report` token
+başına tek satır (`final`) gösterir: girilenlerde giriş anı, girilmeyenlerde ilk fırsat.
 
 ## Milisaniye yarışına girmiyoruz
 

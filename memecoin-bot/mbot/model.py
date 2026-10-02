@@ -17,7 +17,7 @@ import math
 from pathlib import Path
 from typing import Optional
 
-EXCLUDE = {"age_s"}  # karar anında sabit
+EXCLUDE = {"decision_ts", "entry", "final"}  # zaman damgası / strateji işaretleri
 TARGETS = {
     "win": lambda r: (float(r["y_ret"]) > 0) if str(r.get("y_ret", "")) != "" else None,
     "rug": lambda r: bool(int(r["y_rug"])),
@@ -119,8 +119,22 @@ def auc(scores: list[float], labels: list[bool]) -> float:
     return (rank_sum - pos * (pos + 1) / 2) / (pos * neg)
 
 
+def payoff_ratio(rows: list[dict]) -> Optional[float]:
+    """Ortalama kazanç / ortalama kayıp (Kelly'deki b)."""
+    rets = [float(r["y_ret"]) for r in rows if str(r.get("y_ret", "")) != ""]
+    wins = [r for r in rets if r > 0]
+    losses = [-r for r in rets if r < 0]
+    if not wins or not losses:
+        return None
+    return (sum(wins) / len(wins)) / (sum(losses) / len(losses))
+
+
+def _when(r: dict) -> int:
+    return int(float(r.get("decision_ts") or r["created_ts"]))
+
+
 def walk_forward(rows: list[dict], target: str, folds: int = 5, l2: float = 1.0) -> list[dict]:
-    rows = sorted(rows, key=lambda r: int(float(r["created_ts"])))
+    rows = sorted(rows, key=_when)
     keys = feature_keys(rows[0])
     lab = TARGETS[target]
     size = len(rows) // (folds + 1)
@@ -135,9 +149,18 @@ def walk_forward(rows: list[dict], target: str, folds: int = 5, l2: float = 1.0)
         ys = [bool(lab(r)) for r in test]
         top = sorted(zip(sc, test), key=lambda x: x[0], reverse=True)[: max(1, len(test) // 5)]
         rets = [float(r["y_ret"]) for _, r in top if str(r.get("y_ret", "")) != ""]
-        out.append({"fold": k, "train": len(train), "test": len(test), "auc": auc(sc, ys),
-                    "base": sum(ys) / len(ys),
-                    "top20_ret": sum(rets) / len(rets) if rets else float("nan")})
+        row = {"fold": k, "train": len(train), "test": len(test), "auc": auc(sc, ys),
+               "base": sum(ys) / len(ys),
+               "top20_ret": sum(rets) / len(rets) if rets else float("nan")}
+        if target == "win":  # Kelly boyutu düz boyuttan iyi mi? (b eğitim diliminden)
+            b = payoff_ratio(train)
+            pairs = [(p, float(r["y_ret"])) for p, r in zip(sc, test)
+                     if str(r.get("y_ret", "")) != ""]
+            if b and pairs:
+                w = [max(0.5, min(4.0, (p - (1 - p) / b) / 0.05)) for p, _ in pairs]
+                row["flat_ret"] = sum(r for _, r in pairs) / len(pairs)
+                row["kelly_ret"] = sum(wi * r for wi, (_, r) in zip(w, pairs)) / sum(w)
+        out.append(row)
     return out
 
 
@@ -152,11 +175,21 @@ def train_all(rows: list[dict], out_dir: str, min_rows: int = 200) -> str:
         for r in wf:
             lines.append(f"fold {r['fold']}: train={r['train']:5d} test={r['test']:4d} "
                          f"AUC={r['auc']:.3f} taban={r['base']:.1%} "
-                         f"en-iyi-%20 strateji ort={r['top20_ret']:+.2%}")
+                         f"en-iyi-%20 strateji ort={r['top20_ret']:+.2%}"
+                         + (f" | düz boyut {r['flat_ret']:+.2%} → güvene göre boyut "
+                            f"{r['kelly_ret']:+.2%}" if "kelly_ret" in r else ""))
         aucs = [r["auc"] for r in wf if not math.isnan(r["auc"])]
         ok = bool(aucs) and min(aucs) > 0.55
         m = fit(rows, target, keys)
         m.meta["wf_auc"] = aucs
+        if target == "win":
+            m.meta["payoff"] = payoff_ratio(rows)
+            kr = [(r["kelly_ret"], r["flat_ret"]) for r in wf if "kelly_ret" in r]
+            if kr:
+                better = sum(k > f for k, f in kr)
+                lines.append(f"   güvene göre boyut {better}/{len(kr)} foldda düz boyuttan iyi"
+                             + ("" if better > len(kr) / 2 else
+                                " → canlıda MBOT_KELLY_FRACTION=0 kullan (sabit boyut)"))
         if ok:
             m.save(Path(out_dir) / f"{target}.json")
             lines.append(f"→ kaydedildi: {out_dir}/{target}.json (tüm foldlarda AUC > 0.55)")

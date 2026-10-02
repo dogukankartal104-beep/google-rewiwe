@@ -8,6 +8,7 @@ golive     hepsini tek kontrol listesinde toplar
 
 from __future__ import annotations
 
+import json
 import statistics
 import time
 from dataclasses import dataclass, replace
@@ -38,23 +39,27 @@ class Reconciliation:
 def reconcile(store: Store, cfg: Config, now: Optional[int] = None) -> Reconciliation:
     now = now or int(time.time())
     rows = store.db.execute(
-        "SELECT mint, opened_ts, cost_sol, pnl_sol, exit_reason FROM paper_trades "
+        "SELECT mint, opened_ts, cost_sol, pnl_sol, exit_reason, scores FROM paper_trades "
         "WHERE cost_sol > 0 ORDER BY opened_ts").fetchall()
     rep = Reputation(cfg)
     pairs = []
-    for mint, opened, cost, pnl, reason in rows:
+    for mint, opened, cost, pnl, reason, scores in rows:
         tok = store.token(mint)
         if tok is None or tok.created_ts is None:
             continue
-        t_d = tok.created_ts + cfg.decision_age_s
+        try:  # canlı motor karar anını kaydeder; yoksa ilk karar anı varsayılır
+            t_d = int(json.loads(scores or "{}").get("t_d") or tok.created_ts + cfg.ages[0])
+        except (ValueError, TypeError):
+            t_d = tok.created_ts + cfg.ages[0]
         if t_d + cfg.horizon_s > now:
             continue  # ufku bitmemiş
         rep.refresh_from_store(store, t_d)
-        c = make_case(store, cfg, tok, store.trades(mint, until_ts=t_d + cfg.horizon_s), rep)
+        c = make_case(store, cfg, tok, store.trades(mint, until_ts=t_d + cfg.horizon_s), rep, t_d)
         if c is None:
             continue
         p = simulate(mint, c.decision_trade, c.after,
-                     position_size(cfg.equity_sol, cfg, c.f["real_sol"]), c.end_ts, cfg, c.watch)
+                     position_size(cfg.equity_sol, cfg, c.f["real_sol"]), c.end_ts, cfg, c.watch,
+                     c.rescore)
         pairs.append((mint, pnl / cost, reason, p.ret if p else None, p.exit_reason if p else "dolmadı"))
     both = [x for x in pairs if x[3] is not None]
     if not both:

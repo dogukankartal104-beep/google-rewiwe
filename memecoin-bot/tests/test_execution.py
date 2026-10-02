@@ -67,7 +67,7 @@ def test_risk_manager_limits():
 
 
 def test_dataset_and_report():
-    cfg = Config()
+    cfg = Config(decision_ages="120")  # tek karar anı
     store = Store(":memory:")
     for tok, trades, fund in (organic(tail=20), manipulated(tail=20)):
         load(store, tok, trades, fund)
@@ -76,7 +76,7 @@ def test_dataset_and_report():
     assert rows["ORG"]["y_filled"] == rows["PUMP"]["y_filled"] == 1
     # creator cluster boşaltınca stop'u beklemeden çık
     assert rows["PUMP"]["y_exit"] == "insider_exit" and rows["PUMP"]["y_ret"] < -0.3
-    no_watch = Config(insider_exit_frac=99)
+    no_watch = Config(decision_ages="120", insider_exit_frac=99)
     plain = {r["symbol"]: r for r in build_rows(store, no_watch, T0 - 1, T0 + 1)}
     assert plain["PUMP"]["y_exit"] == "stop"
     assert rows["PUMP"]["y_ret"] > plain["PUMP"]["y_ret"]
