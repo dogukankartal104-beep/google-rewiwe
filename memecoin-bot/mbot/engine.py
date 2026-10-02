@@ -20,6 +20,7 @@ from .cohort import build_cohorts
 from .features import compute_features, insider_watch
 from .funding import FundingResolver
 from .model import load_models
+from .notify import HealthMonitor, Notifier
 from .paper import Position, close, expected_tokens, on_trade, open_position
 from .reputation import Reputation
 from .risk import RiskManager
@@ -38,6 +39,10 @@ class Engine:
         self.last_eval: dict[str, int] = {}
         self.meta: dict[str, dict] = {}  # mint → karar anı bilgisi (reconcile için)
         self._last_rescore: dict[str, int] = {}
+        self.store_path = cfg.db_path
+        self.notifier = Notifier(cfg.telegram_token, cfg.telegram_chat_id)
+        self.health = HealthMonitor(self.notifier, cfg.db_path, cfg.health_stall_s, cfg.min_free_gb)
+        self._last_health = 0
         # mint → (boyut, karar, insider watch, karar anında beklenen token)
         self.pending_fill: dict[str, tuple[float, Verdict, dict[str, int], int]] = {}
         self.positions: dict[str, tuple[Position, Verdict]] = {}
@@ -58,9 +63,17 @@ class Engine:
             log.info("itibar: +%d token, %d cüzdan, %d akıllı", n, len(self.rep.wallets), smart)
 
     # ------------------------------------------------------------- events
+    def notify(self, text: str, key: Optional[str] = None) -> None:
+        """Senkron koddan bildirim (event döngüsü yoksa sadece log)."""
+        try:
+            asyncio.get_running_loop().create_task(self.notifier.send(text, key))
+        except RuntimeError:
+            log.info("BİLDİRİM %s", text.replace("\n", " | "))
+
     def on_event(self, ev: pf.Event, slot: int, sig: str, idx: int) -> None:
         self.store.add_event(ev, slot, sig, idx)
         self.n_events += 1
+        self.health.on_event()
         if isinstance(ev, pf.CreateEvent):
             cts = ev.timestamp
             if cts is None:  # eski layout: timestamp yok → duvar saati
@@ -110,6 +123,11 @@ class Engine:
             self.positions[t.mint] = (p, verdict)
             self.risk.on_open(t.mint, p.cost_sol)
             log.info("PAPER BUY  %s %.3f SOL ref=%.3e", t.mint, size, p.ref_price)
+            if self.cfg.notify_trades:
+                why = (f"\norg={verdict.organic:.0f} man={verdict.manipulation:.0f} "
+                       f"surv={verdict.survival:.0f} — {'; '.join(verdict.reasons)}"
+                       if isinstance(verdict, Verdict) else "")
+                self.notify(f"🟢 PAPER ALIM {t.mint[:8]}… {size:.3f} SOL{why}")
             return
         if t.mint in self.positions:
             p, _ = self.positions[t.mint]
@@ -130,6 +148,9 @@ class Engine:
                                    p.exit_reason, json.dumps(info, ensure_ascii=False))
         log.info("PAPER EXIT %s %s pnl=%+.4f SOL (%+.1f%%) equity=%.3f", mint, p.exit_reason,
                  p.pnl_sol, p.ret * 100, self.risk.equity)
+        if self.cfg.notify_trades:
+            self.notify(f"{'✅' if p.pnl_sol > 0 else '🔻'} PAPER ÇIKIŞ {mint[:8]}… {p.exit_reason} "
+                        f"{p.ret * 100:+.1f}% ({p.pnl_sol:+.4f} SOL)\nequity {self.risk.equity:.3f} SOL")
 
     # ------------------------------------------------------------- timer
     async def tick(self) -> None:
@@ -165,6 +186,9 @@ class Engine:
             self.refresh_reputation(now)
         if now - self._last_prune >= 60:
             self.prune(now)
+        if now - self._last_health >= 60:
+            self._last_health = now
+            await self.health.check(self, now)
         self.store.commit()
 
     def prune(self, now: int, idle_s: int = 3600) -> None:
@@ -244,6 +268,8 @@ async def run(cfg: Config, store: Store, trade: bool, resolve_funders: bool) -> 
     resolver = FundingResolver(cfg.rpc_url, store, cfg.funder_max_pages) if resolve_funders else None
     engine = Engine(cfg, store, resolver, trade)
     engine.refresh_reputation(int(time.time()))
+    await engine.notifier.send(f"🤖 mbot başladı ({'paper' if trade else 'collect'}), "
+                               f"{store.n_trades()} trade kayıtlı.")
 
     async def ticker() -> None:
         while True:
@@ -260,7 +286,8 @@ async def run(cfg: Config, store: Store, trade: bool, resolve_funders: bool) -> 
                         "jsonrpc": "2.0", "id": 1, "method": "logsSubscribe",
                         "params": [{"mentions": [pf.PROGRAM_ID]}, {"commitment": "confirmed"}],
                     }))
-                    log.info("bağlandı: %s", cfg.ws_url)
+                    log.info("bağlandı: %s", cfg.ws_url.split("?")[0])
+                    engine.health.set_connected(True)
                     backoff = 1
                     async for raw in ws:
                         msg = json.loads(raw)
@@ -273,6 +300,7 @@ async def run(cfg: Config, store: Store, trade: bool, resolve_funders: bool) -> 
                         for i, ev in enumerate(pf.parse_logs(val.get("logs") or [])):
                             engine.on_event(ev, res["context"]["slot"], val["signature"], i)
             except (OSError, websockets.WebSocketException) as e:
+                engine.health.set_connected(False)
                 log.warning("WS koptu (%s), %ss sonra tekrar", e, backoff)
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 30)

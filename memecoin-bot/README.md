@@ -48,7 +48,7 @@ WebSocket (logsSubscribe: pump.fun programı)
 cd memecoin-bot
 python3 -m venv .venv && . .venv/bin/activate
 pip install -e '.[dev]'      # numpy sadece `train` için gerekli
-pytest                       # 48 test, sentetik organik vs manipüle senaryolar
+pytest                       # 58 test, sentetik organik vs manipüle senaryolar
 ```
 
 Public Solana RPC rate-limit'lidir ve log'ları düşürür. Ciddi kullanım için
@@ -93,6 +93,27 @@ dayanır. Bunu korumak için:
 - **Likidite tavanı (`max_liq_frac`):** pozisyon curve'deki SOL'ün %2'sini geçmez; çıkarken
   kendi satışımızla fiyatı çökertmeyiz.
 - **Rejim filtresi:** son 1 saatte biten tokenların %60'tan fazlası rug ise yeni giriş yok.
+
+## Railway'de çalıştırma
+
+1. Railway → New Project → GitHub repo → bu repo, branch'i seç.
+2. Service Settings → **Root Directory: `memecoin-bot`** (Dockerfile ve `railway.json` buradan
+   okunur; algılanmazsa Config-as-code yolunu `memecoin-bot/railway.json` yap).
+3. Service → **Volume ekle, mount path: `/data`** (veritabanı, modeller, hubs.txt burada;
+   volume olmazsa her deploy'da veri silinir).
+4. Variables:
+   - `MBOT_WS_URL`, `MBOT_RPC_URL` — ücretli RPC (Helius/Triton/QuickNode)
+   - `MBOT_MODE` — `paper` (varsayılan: veri + skor + paper işlem) veya `collect` (sadece veri)
+   - `MBOT_TELEGRAM_TOKEN`, `MBOT_TELEGRAM_CHAT_ID` — bildirimler (opsiyonel ama önerilir)
+5. Deploy. Analiz komutları için: `railway ssh` → `python -m mbot stats`, `golive` vb.
+
+**Telegram kurulumu:** Telegram'da @BotFather → `/newbot` → token'ı al. Bota bir mesaj at,
+sonra `https://api.telegram.org/bot<TOKEN>/getUpdates` adresinde `chat.id`'yi bul.
+`python -m mbot notify-test` ile dene.
+
+**Bildirimler:** bot başladı · veri akışı 5 dk durdu · WebSocket koptu · disk < 1 GB ·
+kill switch / günlük limit · paper alım/çıkış (`MBOT_NOTIFY_TRADES=0` ile kapatılır) ·
+her gün UTC 00:00'da günlük özet. Aynı uyarı 30 dakikada bir kez gönderilir.
 
 ## Faz faz kullanım
 

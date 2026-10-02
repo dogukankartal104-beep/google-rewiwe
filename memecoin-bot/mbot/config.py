@@ -90,6 +90,13 @@ class Config:
     daily_loss_limit: float = 0.03
     max_consecutive_losses: int = 8
 
+    # --- bildirim / sağlık (Telegram: BotFather token + chat id; boşsa sadece log)
+    telegram_token: str = ""
+    telegram_chat_id: str = ""
+    notify_trades: int = 1  # paper alım/çıkışlarını da bildir
+    health_stall_s: int = 300  # bu kadar süre event gelmezse uyar
+    min_free_gb: float = 1.0
+
     # --- canlıya geçiş kontrol listesi
     golive_min_paper: int = 500
     golive_max_gap: float = 0.05  # paper backtest'ten en fazla 5 puan kötü olabilir

@@ -61,6 +61,7 @@ def main() -> None:
     w.add_argument("--top", type=int, default=25)
 
     sub.add_parser("stats", help="veritabanı özeti")
+    sub.add_parser("notify-test", help="Telegram ayarını dene")
 
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
@@ -87,6 +88,16 @@ def main() -> None:
         ts = [int(float(r["created_ts"])) for r in rows]
         print(mc_report(rets, _per_period(ts, a.days), cfg.risk_per_trade, a.max_dd, a.sims,
                         kill_after=cfg.max_consecutive_losses))
+        return
+
+    if a.cmd == "notify-test":
+        from .notify import Notifier
+        n = Notifier(cfg.telegram_token, cfg.telegram_chat_id)
+        if not n.enabled:
+            print("MBOT_TELEGRAM_TOKEN ve MBOT_TELEGRAM_CHAT_ID ayarlı değil.")
+            return
+        ok = asyncio.run(n.send("✅ mbot Telegram bağlantısı çalışıyor."))
+        print("gönderildi" if ok else "GÖNDERİLEMEDİ: token/chat id'yi kontrol et")
         return
 
     if a.cmd == "report":
