@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Social Bot</title>
+<style>
+body{font:16px system-ui;max-width:640px;margin:0 auto;padding:16px;background:#111;color:#eee}
+h2{margin:24px 0 8px}input,textarea,button{font:inherit;width:100%;box-sizing:border-box;padding:10px;margin:4px 0;border-radius:8px;border:1px solid #444;background:#1c1c1c;color:#eee}
+button{background:#3b82f6;border:0;cursor:pointer}label.c{display:inline-flex;align-items:center;gap:6px;margin-right:12px}label.c input{width:auto}
+.acc,.post{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #333}a{color:#7cb7ff}.err{color:#f87171;font-size:13px}.ok{color:#4ade80}
+</style></head><body>
+<h1>Social Bot</h1>
+<h2>Hesaplar</h2><div id="accs"></div>
+<h2>Yeni paylaşım</h2>
+<input type="file" id="file" accept="video/mp4,video/quicktime">
+<input id="url" placeholder="veya video linki (herkese açık mp4)">
+<input id="title" placeholder="Başlık (YouTube için)">
+<textarea id="cap" rows="4" placeholder="Açıklama / caption"></textarea>
+<div id="plats"></div>
+<input type="datetime-local" id="when">
+<button id="go">Zamanla</button><div id="msg"></div>
+<h2>Paylaşımlar</h2><div id="posts"></div>
+<script>
+const $=id=>document.getElementById(id);
+async function load(){
+  const s=await (await fetch('/api/state')).json();
+  $('accs').innerHTML=Object.entries(s.accounts).map(([k,a])=>`<div class="acc"><span>${a.label} ${a.connected?`<b class=ok>✓ ${a.handle||''}</b>`:''}</span>${a.configured?`<a href="/connect/${k}">${a.connected?'Yeniden bağla':'Bağla'}</a>`:'<span class=err>anahtar yok</span>'}</div>`).join('');
+  $('plats').innerHTML=Object.entries(s.accounts).filter(([,a])=>a.connected).map(([k,a])=>`<label class=c><input type=checkbox value="${k}" checked>${a.label}</label>`).join('');
+  $('posts').innerHTML=s.posts.map(p=>`<div class="post"><div><b>${p.status}</b> · ${new Date(p.scheduled_at).toLocaleString('tr-TR')}<br>${p.caption.slice(0,60)}<br>${Object.entries(p.results).map(([k,r])=>r.ok?`<span class=ok>${k} ✓</span> `:`<span class=err>${k}: ${r.error}</span><br>`).join('')}</div>${['scheduled','failed'].includes(p.status)?`<a href="#" onclick="del(${p.id});return false">sil</a>`:''}</div>`).join('');
+}
+async function del(id){await fetch('/api/posts/'+id,{method:'DELETE'});load()}
+$('go').onclick=async()=>{
+  $('msg').textContent='Gönderiliyor...';
+  let url=$('url').value.trim();
+  const f=$('file').files[0];
+  if(f){const r=await fetch('/upload',{method:'POST',body:f});url=(await r.json()).url}
+  const platforms=[...document.querySelectorAll('#plats input:checked')].map(i=>i.value);
+  const w=$('when').value;
+  const r=await fetch('/api/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_url:url,caption:$('cap').value,title:$('title').value,platforms,scheduled_at:w?new Date(w).toISOString():null})});
+  $('msg').textContent=r.ok?'Zamanlandı ✓':'Hata: '+(await r.json()).error;
+  load();
+};
+load();setInterval(load,15000);
+</script></body></html>
