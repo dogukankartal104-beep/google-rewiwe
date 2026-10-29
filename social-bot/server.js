@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { pipeline } from 'node:stream/promises';
 import { fileURLToPath } from 'node:url';
-import { pool, init, saveAccount, getAccount } from './db.js';
+import { pool, init, saveAccount, getAccount, loadSettings, setSetting, cfg } from './db.js';
 import { providers } from './providers.js';
 import { startScheduler } from './scheduler.js';
 
@@ -83,10 +83,18 @@ app.get('/api/state', async (_req, res) => {
   const accounts = {};
   for (const [k, p] of Object.entries(providers)) {
     const acc = await getAccount(k);
-    accounts[k] = { label: p.label, configured: p.configured(), connected: !!acc, handle: acc?.handle ?? null };
+    accounts[k] = { label: p.label, configured: p.configured(), connected: !!acc, handle: acc?.handle ?? null, keys: p.keys, steps: p.steps, redirect: `${BASE_URL}/oauth/${k}/callback`, have: Object.fromEntries(p.keys.map((x) => [x, !!cfg(x)])) };
   }
   const { rows } = await pool.query('select * from posts order by scheduled_at desc limit 50');
   res.json({ accounts, posts: rows });
+});
+
+app.post('/api/settings', async (req, res) => {
+  const allowed = new Set(Object.values(providers).flatMap((p) => p.keys));
+  for (const [k, v] of Object.entries(req.body?.values ?? {})) {
+    if (allowed.has(k) && typeof v === 'string' && v.trim()) await setSetting(k, v.trim());
+  }
+  res.json({ ok: true });
 });
 
 app.post('/upload', async (req, res) => {
@@ -129,6 +137,7 @@ async function cleanMedia() {
 }
 
 await init();
+await loadSettings();
 startScheduler();
 cleanMedia().catch((e) => console.error('cleanMedia:', e.message));
 setInterval(() => cleanMedia().catch((e) => console.error('cleanMedia:', e.message)), 864e5);

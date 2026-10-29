@@ -1,7 +1,5 @@
-import { getAccount, saveAccount } from './db.js';
-
-const env = process.env;
-const redirect = (p) => `${env.BASE_URL}/oauth/${p}/callback`;
+import { getAccount, saveAccount, cfg } from './db.js';
+const redirect = (p) => `${cfg('BASE_URL')}/oauth/${p}/callback`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function j(url, opts = {}) {
@@ -22,12 +20,14 @@ async function download(url) {
 /* ---------------- Instagram (Business/Creator, Instagram Login) ---------------- */
 const IG = 'https://graph.instagram.com/v21.0';
 const instagram = {
+  keys: ['INSTAGRAM_APP_ID','INSTAGRAM_APP_SECRET'],
+  steps: ["developers.facebook.com → My Apps → Create App → \"Other\" → \"Business\" türünü seç.","Ürün ekle: Instagram → \"API setup with Instagram login\".","\"Business login settings\" → OAuth redirect URIs alanına aşağıdaki adresi yapıştır.","App roles → Roles → Instagram Testers: kendi hesabını ekle, sonra Instagram'da Ayarlar → Uygulamalar ve web siteleri → Tester davetleri'nden kabul et.","Instagram app ID ve secret'ı (Instagram → API setup sayfasında) aşağıya yapıştır. Hesabın Business veya Creator olmalı."],
   label: 'Instagram',
-  configured: () => !!(env.INSTAGRAM_APP_ID && env.INSTAGRAM_APP_SECRET),
+  configured: () => !!(cfg('INSTAGRAM_APP_ID') && cfg('INSTAGRAM_APP_SECRET')),
   authUrl: (state) =>
     'https://www.instagram.com/oauth/authorize?' +
     new URLSearchParams({
-      client_id: env.INSTAGRAM_APP_ID,
+      client_id: cfg('INSTAGRAM_APP_ID'),
       redirect_uri: redirect('instagram'),
       response_type: 'code',
       scope: 'instagram_business_basic,instagram_business_content_publish',
@@ -37,8 +37,8 @@ const instagram = {
     const short = await j('https://api.instagram.com/oauth/access_token', {
       method: 'POST',
       body: new URLSearchParams({
-        client_id: env.INSTAGRAM_APP_ID,
-        client_secret: env.INSTAGRAM_APP_SECRET,
+        client_id: cfg('INSTAGRAM_APP_ID'),
+        client_secret: cfg('INSTAGRAM_APP_SECRET'),
         grant_type: 'authorization_code',
         redirect_uri: redirect('instagram'),
         code: code.replace(/#_$/, ''),
@@ -46,7 +46,7 @@ const instagram = {
     });
     const long = await j(
       'https://graph.instagram.com/access_token?' +
-        new URLSearchParams({ grant_type: 'ig_exchange_token', client_secret: env.INSTAGRAM_APP_SECRET, access_token: short.access_token }),
+        new URLSearchParams({ grant_type: 'ig_exchange_token', client_secret: cfg('INSTAGRAM_APP_SECRET'), access_token: short.access_token }),
     );
     const me = await j(`${IG}/me?fields=user_id,username&access_token=${long.access_token}`);
     return {
@@ -86,12 +86,14 @@ const instagram = {
 
 /* ---------------- YouTube ---------------- */
 const youtube = {
+  keys: ['GOOGLE_CLIENT_ID','GOOGLE_CLIENT_SECRET'],
+  steps: ["console.cloud.google.com → yeni proje aç → APIs & Services → \"YouTube Data API v3\" etkinleştir.","OAuth consent screen → External → Test users'a kendi Gmail adresini ekle.","Credentials → Create credentials → OAuth client ID → Web application → Authorized redirect URI'ye aşağıdaki adresi yapıştır.","Client ID ve secret'ı aşağıya yapıştır.","Not: Google denetimi geçene kadar videolar özel yüklenir, YouTube Studio'dan tek tıkla herkese açık yapabilirsin."],
   label: 'YouTube',
-  configured: () => !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+  configured: () => !!(cfg('GOOGLE_CLIENT_ID') && cfg('GOOGLE_CLIENT_SECRET')),
   authUrl: (state) =>
     'https://accounts.google.com/o/oauth2/v2/auth?' +
     new URLSearchParams({
-      client_id: env.GOOGLE_CLIENT_ID,
+      client_id: cfg('GOOGLE_CLIENT_ID'),
       redirect_uri: redirect('youtube'),
       response_type: 'code',
       scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
@@ -104,8 +106,8 @@ const youtube = {
       method: 'POST',
       body: new URLSearchParams({
         code,
-        client_id: env.GOOGLE_CLIENT_ID,
-        client_secret: env.GOOGLE_CLIENT_SECRET,
+        client_id: cfg('GOOGLE_CLIENT_ID'),
+        client_secret: cfg('GOOGLE_CLIENT_SECRET'),
         redirect_uri: redirect('youtube'),
         grant_type: 'authorization_code',
       }),
@@ -123,8 +125,8 @@ const youtube = {
     const t = await j('https://oauth2.googleapis.com/token', {
       method: 'POST',
       body: new URLSearchParams({
-        client_id: env.GOOGLE_CLIENT_ID,
-        client_secret: env.GOOGLE_CLIENT_SECRET,
+        client_id: cfg('GOOGLE_CLIENT_ID'),
+        client_secret: cfg('GOOGLE_CLIENT_SECRET'),
         refresh_token: acc.refresh_token,
         grant_type: 'refresh_token',
       }),
@@ -161,12 +163,14 @@ const youtube = {
 /* ---------------- TikTok ---------------- */
 const TT = 'https://open.tiktokapis.com/v2';
 const tiktok = {
+  keys: ['TIKTOK_CLIENT_KEY','TIKTOK_CLIENT_SECRET'],
+  steps: ["developers.tiktok.com → Manage apps → Connect an app. Products: Login Kit ve Content Posting API ekle.","Login Kit → Redirect URI'ye aşağıdaki adresi yapıştır. Scopes: user.info.basic, video.upload, video.publish.","Sandbox'ta kendi TikTok hesabını Target Users olarak ekle.","Client key ve secret'ı aşağıya yapıştır. Video TikTok taslaklarına düşer, uygulamadan tek dokunuşla yayınlarsın."],
   label: 'TikTok',
-  configured: () => !!(env.TIKTOK_CLIENT_KEY && env.TIKTOK_CLIENT_SECRET),
+  configured: () => !!(cfg('TIKTOK_CLIENT_KEY') && cfg('TIKTOK_CLIENT_SECRET')),
   authUrl: (state) =>
     'https://www.tiktok.com/v2/auth/authorize/?' +
     new URLSearchParams({
-      client_key: env.TIKTOK_CLIENT_KEY,
+      client_key: cfg('TIKTOK_CLIENT_KEY'),
       scope: 'user.info.basic,video.publish,video.upload',
       response_type: 'code',
       redirect_uri: redirect('tiktok'),
@@ -177,8 +181,8 @@ const tiktok = {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_key: env.TIKTOK_CLIENT_KEY,
-        client_secret: env.TIKTOK_CLIENT_SECRET,
+        client_key: cfg('TIKTOK_CLIENT_KEY'),
+        client_secret: cfg('TIKTOK_CLIENT_SECRET'),
         code,
         grant_type: 'authorization_code',
         redirect_uri: redirect('tiktok'),
@@ -202,8 +206,8 @@ const tiktok = {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_key: env.TIKTOK_CLIENT_KEY,
-        client_secret: env.TIKTOK_CLIENT_SECRET,
+        client_key: cfg('TIKTOK_CLIENT_KEY'),
+        client_secret: cfg('TIKTOK_CLIENT_SECRET'),
         grant_type: 'refresh_token',
         refresh_token: acc.refresh_token,
       }),
@@ -222,12 +226,12 @@ const tiktok = {
     if (video.length > 64 * 1024 * 1024) throw new Error('TikTok için video 64MB üstü, küçült');
     const headers = { Authorization: `Bearer ${acc.access_token}`, 'Content-Type': 'application/json; charset=UTF-8' };
     // inbox: video TikTok taslaklarına düşer, uygulamadan tek dokunuşla yayınlarsın (denetim gerekmez)
-    const inbox = env.TIKTOK_MODE === 'inbox';
+    const inbox = cfg('TIKTOK_MODE') === 'inbox';
     const init = await j(`${TT}/post/publish/${inbox ? 'inbox/video' : 'video'}/init/`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        ...(inbox ? {} : { post_info: { title: post.caption.slice(0, 2200), privacy_level: env.TIKTOK_PRIVACY || 'SELF_ONLY' } }),
+        ...(inbox ? {} : { post_info: { title: post.caption.slice(0, 2200), privacy_level: cfg('TIKTOK_PRIVACY') || 'SELF_ONLY' } }),
         source_info: { source: 'FILE_UPLOAD', video_size: video.length, chunk_size: video.length, total_chunk_count: 1 },
       }),
     });

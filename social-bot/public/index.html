@@ -34,6 +34,9 @@ label.c{display:inline-flex;gap:6px;align-items:center;margin:6px 12px 6px 0}lab
   <div class="cal" id="cal"></div>
   <div class="card" style="margin-top:16px"><b>Son paylaşımlar</b><div id="list"></div></div>
 </main>
+<dialog id="sdlg"><form method="dialog"><h3 id="sh" style="margin-top:0"></h3><ol id="ss" style="padding-left:18px;line-height:1.5"></ol>
+  <small>Redirect adresi (kopyala):</small><input id="sr" readonly onclick="this.select();navigator.clipboard?.writeText(this.value)">
+  <div id="sk"></div><div class="row" style="margin-top:12px"><button class="btn" id="ssave" type="button">Kaydet</button><button class="btn g" value="x">Kapat</button><span id="smsg"></span></div></form></dialog>
 <dialog id="dlg"><form method="dialog" id="fm">
   <h3 style="margin-top:0">Yeni paylaşım</h3>
   <input type="file" id="file" accept="video/mp4,video/quicktime">
@@ -53,7 +56,7 @@ async function load(){
   S=await r.json();draw();
 }
 function draw(){
-  $('accs').innerHTML=Object.entries(S.accounts).map(([k,a])=>`<div class="acc"><span class="dot ${a.connected?'on':''}"></span>${esc(a.label)}${a.connected?` <small>${esc(a.handle||'')}</small>`:''} ${a.configured?`<a href="/connect/${k}">${a.connected?'yenile':'bağla'}</a>`:'<small class="err">anahtar yok</small>'}</div>`).join('');
+  $('accs').innerHTML=Object.entries(S.accounts).map(([k,a])=>`<div class="acc"><span class="dot ${a.connected?'on':''}"></span>${esc(a.label)}${a.connected?` <small>${esc(a.handle||'')}</small>`:''} ${a.configured?`<a href="/connect/${k}">${a.connected?'yenile':'bağla'}</a>`:''} <a href="#" onclick="setup('${k}');return false">${a.configured?'ayar':'<b>kurulum</b>'}</a></div>`).join('');
   $('plats').innerHTML=Object.entries(S.accounts).filter(([,a])=>a.connected).map(([k,a])=>`<label class="c"><input type="checkbox" value="${k}" checked>${esc(a.label)}</label>`).join('')||'<small>Önce bir hesap bağla.</small>';
   $('mt').textContent=cur.toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
   const first=new Date(cur),start=new Date(first);start.setDate(1-((first.getDay()+6)%7));
@@ -67,6 +70,12 @@ function draw(){
    ${['scheduled','failed'].includes(p.status)?`<a href="#" onclick="del(${p.id});return false" style="float:right;color:#fca5a5">sil</a>`:''}<br><small>${esc(p.caption.slice(0,80))}</small>
    ${Object.entries(p.results).map(([k,r])=>r.ok?`<br><span style="color:#4ade80">${k} ✓</span>`:`<br><span class="err">${k}: ${esc(r.error)}</span>`).join('')}</div>`).join('')||'<br><small>Henüz yok.</small>';
 }
+let SK=null;
+function setup(k){const a=S.accounts[k];SK=a;$('sh').textContent=a.label+' kurulumu';$('ss').innerHTML=a.steps.map(t=>`<li>${esc(t)}</li>`).join('');$('sr').value=a.redirect;
+  $('sk').innerHTML=a.keys.map(x=>`<input data-k="${x}" placeholder="${x}${a.have[x]?' (kayıtlı, değiştirmek için yaz)':''}" autocomplete="off">`).join('');$('smsg').textContent='';$('sdlg').showModal()}
+$('ssave').onclick=async()=>{const values={};document.querySelectorAll('#sk input').forEach(i=>{if(i.value.trim())values[i.dataset.k]=i.value.trim()});
+  const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({values})});
+  $('smsg').textContent=r.ok?'Kaydedildi ✓ — şimdi "bağla"ya bas':'Hata';await load()};
 async function del(id){await fetch('/api/posts/'+id,{method:'DELETE'});load()}
 $('prev').onclick=()=>{cur.setMonth(cur.getMonth()-1);draw()};$('next').onclick=()=>{cur.setMonth(cur.getMonth()+1);draw()};
 $('new').onclick=()=>$('dlg').showModal();

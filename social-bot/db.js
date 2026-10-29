@@ -12,6 +12,7 @@ export async function init() {
       data jsonb not null,
       updated_at timestamptz not null default now()
     );
+    create table if not exists settings (key text primary key, value text not null);
     create table if not exists posts (
       id serial primary key,
       caption text not null default '',
@@ -38,4 +39,15 @@ export async function saveAccount(platform, data) {
      on conflict (platform) do update set data=$2, updated_at=now()`,
     [platform, data],
   );
+}
+
+const cache = {};
+export const cfg = (k) => cache[k] || process.env[k];
+export async function loadSettings() {
+  const { rows } = await pool.query('select key,value from settings');
+  for (const r of rows) cache[r.key] = r.value;
+}
+export async function setSetting(k, v) {
+  await pool.query('insert into settings(key,value) values($1,$2) on conflict (key) do update set value=$2', [k, v]);
+  cache[k] = v;
 }
