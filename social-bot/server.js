@@ -94,6 +94,19 @@ app.delete('/api/posts/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// 30 günden eski medyayı sil; zamanlanmış/çalışan bir paylaşımın videosuna dokunma.
+async function cleanMedia() {
+  const { rows } = await pool.query(`select video_url from posts where status in ('scheduled','running')`);
+  const keep = new Set(rows.map((r) => r.video_url.split('/media/')[1]));
+  const limit = Date.now() - 30 * 864e5;
+  for (const f of fs.readdirSync(MEDIA_DIR)) {
+    const file = path.join(MEDIA_DIR, f);
+    if (!keep.has(f) && fs.statSync(file).mtimeMs < limit) fs.unlinkSync(file);
+  }
+}
+
 await init();
 startScheduler();
+cleanMedia().catch((e) => console.error('cleanMedia:', e.message));
+setInterval(() => cleanMedia().catch((e) => console.error('cleanMedia:', e.message)), 864e5);
 app.listen(process.env.PORT || 3000, () => console.log('social-bot hazır'));
