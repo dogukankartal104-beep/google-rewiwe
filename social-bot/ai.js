@@ -73,3 +73,36 @@ export async function analyzeVideo(buf, mime = 'video/mp4') {
   if (!text) throw new Error('Gemini boş yanıt verdi: ' + JSON.stringify(out.promptFeedback ?? out).slice(0, 200));
   return JSON.parse(text);
 }
+
+async function generateJson(prompt) {
+  const key = cfg('GEMINI_API_KEY');
+  if (!key) throw new Error('GEMINI_API_KEY yok');
+  const model = cfg('GEMINI_MODEL') || 'gemini-2.5-flash';
+  const out = await j(`${G}/v1beta/models/${model}:generateContent`, {
+    method: 'POST',
+    headers: { 'x-goog-api-key': key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature: 0.3 } }),
+  });
+  const text = out.candidates?.[0]?.content?.parts?.map((p) => p.text).join('') ?? '';
+  if (!text) throw new Error('Gemini boş yanıt verdi');
+  return JSON.parse(text);
+}
+
+const PERF = `Aşağıda sosyal medya hesaplarının GERÇEK performans verisi var (JSON). Bu veriye bakarak analiz yap.
+
+KURALLAR:
+- Sadece verideki sayılara dayan. Veride olmayan rakam, trend, sektör ortalaması UYDURMA.
+- Örneklem küçükse (10'dan az gönderi gibi) bunu açıkça yaz, kesin hüküm verme.
+- Her bulgu için "evidence" alanına verideki hangi gönderi (id) veya sayıya dayandığını yaz.
+- Korelasyon nedensellik değildir: "şu yüzden oldu" yerine "şu gönderilerde daha yüksekti" de.
+- Önerilen içerik fikirleri, en iyi performans gösteren gönderilerin konularına ve biçimine dayansın. Hangi tür (konu/biçim/uzunluk) daha çok izlenmiş karşılaştır.
+- Platformlar arası karşılaştırma yaparken izlenme tanımlarının platformlara göre farklı olabileceğini belirt.
+- Türkçe yaz.
+
+Sadece şu JSON'u döndür:
+{"headline":"tek cümle genel durum","findings":[{"text":"","evidence":""}],"next_posts":[{"idea":"","why":""}],"platform_advice":{"instagram":"","youtube":"","tiktok":""},"caveats":[""]}
+
+VERİ:
+`;
+
+export const analyzePerformance = (summary) => generateJson(PERF + JSON.stringify(summary));

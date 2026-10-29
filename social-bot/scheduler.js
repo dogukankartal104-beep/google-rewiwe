@@ -5,7 +5,7 @@ export async function runPost(post) {
   const results = {};
   for (const platform of post.platforms) {
     try {
-      const acc = await freshAccount(platform);
+      const acc = await freshAccount(post.workspace_id, platform);
       const id = await providers[platform].publish(acc, post);
       results[platform] = { ok: true, id };
     } catch (e) {

@@ -30,7 +30,7 @@ const instagram = {
       client_id: cfg('INSTAGRAM_APP_ID'),
       redirect_uri: redirect('instagram'),
       response_type: 'code',
-      scope: 'instagram_business_basic,instagram_business_content_publish',
+      scope: 'instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights',
       state,
     }),
   async exchange(code) {
@@ -96,7 +96,7 @@ const youtube = {
       client_id: cfg('GOOGLE_CLIENT_ID'),
       redirect_uri: redirect('youtube'),
       response_type: 'code',
-      scope: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
+      scope: 'https://www.googleapis.com/auth/youtube',
       access_type: 'offline',
       prompt: 'consent',
       state,
@@ -158,20 +158,27 @@ const youtube = {
     });
     return up.id;
   },
+  async remove(acc, id) {
+    const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?id=${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${acc.access_token}` },
+    });
+    if (!res.ok && res.status !== 404) throw new Error(`YouTube silme ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  },
 };
 
 /* ---------------- TikTok ---------------- */
 const TT = 'https://open.tiktokapis.com/v2';
 const tiktok = {
   keys: ['TIKTOK_CLIENT_KEY','TIKTOK_CLIENT_SECRET'],
-  steps: ["developers.tiktok.com → Manage apps → Connect an app. Products: Login Kit ve Content Posting API ekle.","Login Kit → Redirect URI'ye aşağıdaki adresi yapıştır. Scopes: user.info.basic, video.upload, video.publish.","Sandbox'ta kendi TikTok hesabını Target Users olarak ekle.","Client key ve secret'ı aşağıya yapıştır. Video TikTok taslaklarına düşer, uygulamadan tek dokunuşla yayınlarsın."],
+  steps: ["developers.tiktok.com → Manage apps → Connect an app. Products: Login Kit, Content Posting API ve Display API ekle.","Login Kit → Redirect URI'ye aşağıdaki adresi yapıştır. Scopes: user.info.basic, user.info.stats, video.list, video.upload, video.publish.","Sandbox'ta kendi TikTok hesabını Target Users olarak ekle.","Client key ve secret'ı aşağıya yapıştır. Video TikTok taslaklarına düşer, uygulamadan tek dokunuşla yayınlarsın."],
   label: 'TikTok',
   configured: () => !!(cfg('TIKTOK_CLIENT_KEY') && cfg('TIKTOK_CLIENT_SECRET')),
   authUrl: (state) =>
     'https://www.tiktok.com/v2/auth/authorize/?' +
     new URLSearchParams({
       client_key: cfg('TIKTOK_CLIENT_KEY'),
-      scope: 'user.info.basic,video.publish,video.upload',
+      scope: cfg('TIKTOK_SCOPES') || 'user.info.basic,user.info.stats,video.list,video.upload,video.publish',
       response_type: 'code',
       redirect_uri: redirect('tiktok'),
       state,
@@ -260,12 +267,12 @@ const tiktok = {
 
 export const providers = { instagram, youtube, tiktok };
 
-export async function freshAccount(platform) {
-  let acc = await getAccount(platform);
+export async function freshAccount(ws, platform) {
+  let acc = await getAccount(ws, platform);
   if (!acc) throw new Error(`${providers[platform].label} bağlı değil`);
   if (providers[platform].refreshDue(acc)) {
     acc = await providers[platform].refresh(acc);
-    await saveAccount(platform, acc);
+    await saveAccount(ws, platform, acc);
   }
   return acc;
 }

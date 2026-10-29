@@ -4,41 +4,63 @@
 <style>
 :root{--bg:#0b0b10;--card:#15151d;--line:#262633;--mut:#8b8b9a;--ac:linear-gradient(135deg,#6366f1,#ec4899)}
 *{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:#f4f4f5}
-header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
-header b{font-size:18px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-main{max-width:1100px;margin:0 auto;padding:20px}
+header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5;flex-wrap:wrap}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+main{max-width:1180px;margin:0 auto;padding:20px}
 .btn{border:0;border-radius:10px;padding:10px 16px;font:inherit;font-weight:600;color:#fff;background:var(--ac);cursor:pointer}
-.btn.g{background:#22222e;font-weight:500}
+.btn.g{background:#22222e;font-weight:500}.btn:disabled{opacity:.6}
+.tab{border:1px solid var(--line);background:#15151d;color:#cfcfda;border-radius:999px;padding:8px 14px;font:inherit;cursor:pointer}
+.tab.on{background:var(--ac);border-color:transparent;color:#fff;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}.seg button{border:0;background:#15151d;color:#cfcfda;padding:9px 16px;font:inherit;cursor:pointer}.seg button.on{background:#2a2a3a;color:#fff;font-weight:600}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
 .acc{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:#1d1d28;font-size:14px}
 .dot{width:8px;height:8px;border-radius:50%;background:#52525b}.dot.on{background:#4ade80}
-.acc a{color:#a5b4fc;text-decoration:none}
+a{color:#a5b4fc;text-decoration:none}.hide{display:none}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .cal>div{background:var(--card);min-height:92px;padding:6px;font-size:12px;color:var(--mut)}
-.cal .h{min-height:0;text-align:center;font-weight:600;padding:8px}
-.cal .today{background:#1b1b2c}.cal .o{opacity:.4}
+.cal .h{min-height:0;text-align:center;font-weight:600;padding:8px}.cal .today{background:#1b1b2c}.cal .o{opacity:.4}
 .chip{display:block;margin-top:4px;padding:3px 6px;border-radius:6px;font-size:11px;color:#fff;background:#4f46e5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .chip.done{background:#16a34a}.chip.failed{background:#dc2626}.chip.partial{background:#d97706}.chip.running{background:#0891b2}
-.mon{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.mon h2{margin:0;font-size:18px}.mon button{width:36px}
-dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:#f4f4f5;width:min(480px,94vw);padding:20px}
-dialog::backdrop{background:rgba(0,0,0,.65)}
+.mon{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}.mon h2{margin:0;font-size:18px}.mon button{width:36px}
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:#f4f4f5;width:min(500px,94vw);padding:20px}dialog::backdrop{background:rgba(0,0,0,.65)}
 input,textarea{width:100%;margin:5px 0;padding:11px;border-radius:10px;border:1px solid var(--line);background:#0f0f16;color:#fff;font:inherit}
 label.c{display:inline-flex;gap:6px;align-items:center;margin:6px 12px 6px 0}label.c input{width:auto;margin:0}
-.err{color:#fca5a5;font-size:12px}small{color:var(--mut)}
+.err{color:#fca5a5;font-size:12px}small{color:var(--mut)}.ok{color:#4ade80}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:10px 0}
+.stat{background:#1a1a24;border-radius:10px;padding:10px}.stat b{display:block;font-size:20px}.stat small{font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:8px 6px;border-top:1px solid var(--line);text-align:right;white-space:nowrap}
+th{color:var(--mut);font-weight:500;cursor:pointer}th:first-child,td:first-child{text-align:left;white-space:normal}
+.thumb{width:38px;height:50px;border-radius:6px;object-fit:cover;background:#222;vertical-align:middle;margin-right:8px}
+.tw{overflow-x:auto}.pill{display:inline-block;padding:2px 8px;border-radius:999px;background:#2a2a3a;font-size:12px;margin:2px 4px 2px 0}
+ul.f{padding-left:18px;margin:6px 0}ul.f li{margin:6px 0}
 </style></head><body>
-<header><b>▶ Social Bot</b><div class="row"><button class="btn" id="new">+ Yeni paylaşım</button><button class="btn g" id="out">Çıkış</button></div></header>
+<header>
+  <div class="row"><b style="font-size:18px">▶ Social Bot</b><div class="row" id="tabs"></div></div>
+  <div class="row"><button class="btn" id="new">+ Yeni paylaşım</button><button class="btn g" id="out">Çıkış</button></div>
+</header>
 <main>
-  <div class="card row" id="accs"></div>
-  <div class="mon"><button class="btn g" id="prev">‹</button><h2 id="mt"></h2><button class="btn g" id="next">›</button></div>
-  <div class="cal" id="cal"></div>
-  <div class="card" style="margin-top:16px"><b>Son paylaşımlar</b><div id="list"></div></div>
+  <div class="row" style="margin-bottom:16px"><div class="seg"><button id="vb1" class="on">Takvim</button><button id="vb2">Analiz</button></div></div>
+
+  <div id="v1">
+    <div class="card row" id="accs"></div>
+    <div class="mon"><button class="btn g" id="prev">‹</button><h2 id="mt"></h2><button class="btn g" id="next">›</button></div>
+    <div class="cal" id="cal"></div>
+    <div class="card" style="margin-top:16px"><b>Son paylaşımlar</b><div id="list"></div></div>
+  </div>
+
+  <div id="v2" class="hide">
+    <div class="row" style="margin-bottom:12px"><button class="btn g" id="rf">↻ Yenile</button><button class="btn" id="insb">✨ Yapay zekayla analiz et</button><small id="insm"></small></div>
+    <div id="ins"></div>
+    <div id="an"></div>
+  </div>
 </main>
+
 <dialog id="sdlg"><form method="dialog"><h3 id="sh" style="margin-top:0"></h3><ol id="ss" style="padding-left:18px;line-height:1.5"></ol>
   <small>Redirect adresi (kopyala):</small><input id="sr" readonly onclick="this.select();navigator.clipboard?.writeText(this.value)">
   <div id="sk"></div><div class="row" style="margin-top:12px"><button class="btn" id="ssave" type="button">Kaydet</button><button class="btn g" value="x">Kapat</button><span id="smsg"></span></div></form></dialog>
+
 <dialog id="dlg"><form method="dialog" id="fm">
-  <h3 style="margin-top:0">Yeni paylaşım</h3>
+  <h3 style="margin-top:0">Yeni paylaşım <small id="dbrand"></small></h3>
   <input type="file" id="file" accept="video/mp4,video/quicktime">
   <input id="url" placeholder="veya herkese açık video linki (mp4)">
   <div id="chk"></div>
@@ -52,49 +74,107 @@ label.c{display:inline-flex;gap:6px;align-items:center;margin:6px 12px 6px 0}lab
   <input type="datetime-local" id="when"><small id="sug"></small>
   <div class="row" style="margin-top:12px"><button class="btn" id="go" type="button">Zamanla</button><button class="btn g" value="x">Vazgeç</button><span id="msg"></span></div>
 </form></dialog>
+
 <script>
 const $=id=>document.getElementById(id);
-let S={accounts:{},posts:[]},cur=new Date();cur.setDate(1);
 const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-async function load(){
-  const r=await fetch('/api/state');if(r.status===401)return location.href='/login';
-  S=await r.json();draw();
-}
+const api=async(u,o)=>{const r=await fetch(u,o);if(r.status===401){location.href='/login';throw new Error('giriş gerekli')}
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('hata '+r.status));return j};
+const post=(u,b)=>api(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});
+let S=null,AN=null,WS=Number(new URLSearchParams(location.search).get('ws'))||Number(localStorage.ws)||0,VIEW='cal',SORT='views',cur=new Date();cur.setDate(1);
+
+async function load(){S=await api('/api/state?ws='+WS);WS=S.ws;localStorage.ws=WS;draw();if(VIEW==='an'&&!AN)loadAn()}
+const pick=id=>{WS=id;AN=null;$('ins').innerHTML='';load()};
+async function addBrand(){const n=prompt('Marka / hesap grubu adı (örn. Prep Nurse)');if(!n)return;const w=await post('/api/workspaces',{name:n});WS=w.id;AN=null;load()}
+async function delBrand(){if(!confirm('Bu markayı, bağlı hesaplarını ve paylaşım kayıtlarını silmek istediğine emin misin? (Platformlardaki gönderiler silinmez.)'))return;
+  await api('/api/workspaces/'+WS,{method:'DELETE'});WS=0;AN=null;load()}
+async function disc(k){if(!confirm('Bu hesabın bağlantısı kaldırılsın mı? (Platformdaki hesap silinmez.)'))return;await api(`/api/accounts/${k}?ws=${WS}`,{method:'DELETE'});AN=null;load()}
+function setView(v){VIEW=v;$('v1').classList.toggle('hide',v!=='cal');$('v2').classList.toggle('hide',v!=='an');$('vb1').classList.toggle('on',v==='cal');$('vb2').classList.toggle('on',v==='an');if(v==='an'&&!AN)loadAn()}
+$('vb1').onclick=()=>setView('cal');$('vb2').onclick=()=>setView('an');
+
 function draw(){
-  $('accs').innerHTML=Object.entries(S.accounts).map(([k,a])=>`<div class="acc"><span class="dot ${a.connected?'on':''}"></span>${esc(a.label)}${a.connected?` <small>${esc(a.handle||'')}</small>`:''} ${a.configured?`<a href="/connect/${k}">${a.connected?'yenile':'bağla'}</a>`:''} <a href="#" onclick="setup('${k}');return false">${a.configured?'ayar':'<b>kurulum</b>'}</a></div>`).join('');
-  $('accs').innerHTML+=`<div class="acc"><span class="dot ${S.ai.configured?'on':''}"></span>Yapay zeka <a href="#" onclick="setup('ai');return false">${S.ai.configured?'ayar':'<b>kurulum</b>'}</a></div>`;
-  $('plats').innerHTML=Object.entries(S.accounts).filter(([,a])=>a.connected).map(([k,a])=>`<label class="c"><input type="checkbox" value="${k}" checked>${esc(a.label)}</label>`).join('')||'<small>Önce bir hesap bağla.</small>';
+  $('tabs').innerHTML=S.workspaces.map(w=>`<button class="tab ${w.id===WS?'on':''}" onclick="pick(${w.id})">${esc(w.name)}</button>`).join('')+`<button class="tab" onclick="addBrand()">+ Marka</button>`;
+  $('accs').innerHTML=Object.entries(S.accounts).map(([k,a])=>`<div class="acc"><span class="dot ${a.connected?'on':''}"></span>${esc(a.label)}${a.connected?` <small>${esc(a.handle||'')}</small>`:''} ${a.configured?`<a href="/connect/${k}?ws=${WS}">${a.connected?'yenile':'bağla'}</a>`:''} <a href="#" onclick="setup('${k}');return false">${a.configured?'ayar':'<b>kurulum</b>'}</a>${a.connected?` <a href="#" onclick="disc('${k}');return false" style="color:#fca5a5">çıkar</a>`:''}</div>`).join('')
+   +`<div class="acc"><span class="dot ${S.ai.configured?'on':''}"></span>Yapay zeka <a href="#" onclick="setup('ai');return false">${S.ai.configured?'ayar':'<b>kurulum</b>'}</a></div>`
+   +(S.workspaces.length>1?`<a href="#" onclick="delBrand();return false" style="margin-left:auto;color:#fca5a5;font-size:13px">Markayı sil</a>`:'');
+  $('plats').innerHTML=Object.entries(S.accounts).filter(([,a])=>a.connected).map(([k,a])=>`<label class="c"><input type="checkbox" value="${k}" checked>${esc(a.label)}</label>`).join('')||'<small>Önce bu marka için bir hesap bağla.</small>';
+  $('dbrand').textContent='· '+(S.workspaces.find(w=>w.id===WS)?.name||'');
   $('mt').textContent=cur.toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
   const first=new Date(cur),start=new Date(first);start.setDate(1-((first.getDay()+6)%7));
-  let h=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].map(d=>`<div class="h">${d}</div>`).join('');
-  const today=new Date().toDateString();
+  let h=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].map(d=>`<div class="h">${d}</div>`).join('');const today=new Date().toDateString();
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);
     const ps=S.posts.filter(p=>new Date(p.scheduled_at).toDateString()===d.toDateString());
     h+=`<div style="cursor:pointer" onclick="openNew(new Date(${d.getTime()}))" class="${d.toDateString()===today?'today':''} ${d.getMonth()!==cur.getMonth()?'o':''}">${d.getDate()}${ps.map(p=>`<span class="chip ${p.status}" title="${esc(p.caption)}">${new Date(p.scheduled_at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})} ${esc(p.caption||p.title||'video')}</span>`).join('')}</div>`}
   $('cal').innerHTML=h;
   $('list').innerHTML=S.posts.slice(0,15).map(p=>`<div style="padding:10px 0;border-top:1px solid var(--line)"><b>${p.status}</b> · ${new Date(p.scheduled_at).toLocaleString('tr-TR')} · ${esc(p.platforms.join(', '))}
    ${['scheduled','failed'].includes(p.status)?`<a href="#" onclick="del(${p.id});return false" style="float:right;color:#fca5a5">sil</a>`:''}<br><small>${esc(p.caption.slice(0,80))}</small>
-   ${Object.entries(p.results).map(([k,r])=>r.ok?`<br><span style="color:#4ade80">${k} ✓</span>`:`<br><span class="err">${k}: ${esc(r.error)}</span>`).join('')}</div>`).join('')||'<br><small>Henüz yok.</small>';
+   ${Object.entries(p.results).map(([k,r])=>r.ok?`<br><span class="ok">${k} ✓</span>`:`<br><span class="err">${k}: ${esc(r.error)}</span>`).join('')}</div>`).join('')||'<br><small>Henüz yok.</small>';
 }
-let SK=null;
-function setup(k){const a=S.accounts[k]||S.ai;SK=a;$('sh').textContent=a.label+' kurulumu';$('ss').innerHTML=a.steps.map(t=>`<li>${esc(t)}</li>`).join('');$('sr').value=a.redirect;$('sr').style.display=a.redirect?'':'none';
-  $('sk').innerHTML=a.keys.map(x=>`<input data-k="${x}" placeholder="${x}${a.have[x]?' (kayıtlı, değiştirmek için yaz)':''}" autocomplete="off">`).join('');$('smsg').textContent='';$('sdlg').showModal()}
-$('ssave').onclick=async()=>{const values={};document.querySelectorAll('#sk input').forEach(i=>{if(i.value.trim())values[i.dataset.k]=i.value.trim()});
-  const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({values})});
-  $('smsg').textContent=r.ok?'Kaydedildi ✓ — şimdi "bağla"ya bas':'Hata';await load()};
-async function del(id){await fetch('/api/posts/'+id,{method:'DELETE'});load()}
+async function del(id){await api('/api/posts/'+id,{method:'DELETE'});load()}
 $('prev').onclick=()=>{cur.setMonth(cur.getMonth()-1);draw()};$('next').onclick=()=>{cur.setMonth(cur.getMonth()+1);draw()};
 $('new').onclick=()=>openNew(new Date());
 $('out').onclick=async()=>{await fetch('/logout',{method:'POST'});location.href='/login'};
 
-// Genel kabul gören yayın aralıkları (Türkiye saati). Kesin veri değil; kendi hesabının istatistiklerine bakıp ayarla.
+/* ---- kurulum penceresi ---- */
+function setup(k){const a=S.accounts[k]||S.ai;$('sh').textContent=a.label+' kurulumu';$('ss').innerHTML=a.steps.map(t=>`<li>${esc(t)}</li>`).join('');$('sr').value=a.redirect;$('sr').style.display=a.redirect?'':'none';
+  $('sk').innerHTML=a.keys.map(x=>`<input data-k="${x}" placeholder="${x}${a.have[x]?' (kayıtlı, değiştirmek için yaz)':''}" autocomplete="off">`).join('');$('smsg').textContent='';$('sdlg').showModal()}
+$('ssave').onclick=async()=>{const values={};document.querySelectorAll('#sk input').forEach(i=>{if(i.value.trim())values[i.dataset.k]=i.value.trim()});
+  try{await post('/api/settings',{values});$('smsg').textContent='Kaydedildi ✓';await load()}catch(e){$('smsg').textContent=e.message}};
+
+/* ---- analiz ---- */
+const fmt=n=>n==null?'–':Number(n).toLocaleString('tr-TR');
+const IL={reach:'Erişim (7 gün)',profile_views:'Profil ziyareti (7 gün)',website_clicks:'Web sitesi tıklaması (7 gün)',profile_links_taps:'Profil linki tıklaması (7 gün)'};
+const PN={instagram:'Instagram',youtube:'YouTube',tiktok:'TikTok'};
+function spark(h){const pts=(h||[]).filter(x=>x.followers!=null);if(pts.length<2)return '<small>Takipçi grafiği yarından itibaren birikir (günde birkaç kez kayıt alınır).</small>';
+  const w=300,hh=54,v=pts.map(p=>p.followers),mn=Math.min(...v),mx=Math.max(...v);
+  const c=pts.map((p,i)=>`${(i/(pts.length-1))*w},${hh-((p.followers-mn)/((mx-mn)||1))*(hh-8)-4}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${hh}" width="100%" height="${hh}" preserveAspectRatio="none"><polyline fill="none" stroke="#818cf8" stroke-width="2" points="${c}"/></svg><small>${pts[0].day} → ${pts[pts.length-1].day}</small>`}
+async function loadAn(refresh){
+  $('an').innerHTML='<div class="card"><small>Veriler platformlardan çekiliyor...</small></div>';
+  try{AN=await api(`/api/analytics?ws=${WS}${refresh?'&refresh=1':''}`);renderAn()}catch(e){$('an').innerHTML=`<div class="card err">${esc(e.message)}</div>`}}
+$('rf').onclick=()=>loadAn(true);
+function renderAn(){
+  const ks=Object.keys(AN);
+  if(!ks.length){$('an').innerHTML='<div class="card">Bu marka için henüz bağlı hesap yok. Takvim sekmesinden bağla.</div>';return}
+  $('an').innerHTML=ks.map(k=>{const d=AN[k];
+    if(d.error)return `<div class="card"><b>${PN[k]}</b><div class="err">${esc(d.error)}</div><small>${esc(d.hint||'')}</small></div>`;
+    const a=d.account,ch=d.followersChange;
+    const stats=[['Takipçi',fmt(a.followers),ch?`${ch.value>=0?'+':''}${fmt(ch.value)} (${ch.since}'den beri)`:''],['Toplam izlenme',fmt(a.views)],['Toplam beğeni',fmt(a.likes)],['Gönderi',fmt(a.posts)],...Object.entries(a.insights||{}).filter(([,v])=>v!=null).map(([m,v])=>[IL[m]||m,fmt(v)])].filter(s=>s[1]!=='–');
+    const posts=[...d.posts].sort((x,y)=>SORT==='time'?new Date(y.time)-new Date(x.time):(y.metrics[SORT]??-1)-(x.metrics[SORT]??-1));
+    const bt=d.best;
+    return `<div class="card"><div class="row"><b style="font-size:17px">${PN[k]}</b><small>${esc(d.handle||'')}</small></div>
+     <div class="stats">${stats.map(s=>`<div class="stat"><b>${s[1]}</b><small>${esc(s[0])}</small>${s[2]?`<br><small class="ok">${esc(s[2])}</small>`:''}</div>`).join('')}</div>
+     ${spark(d.history)}
+     ${(d.notes||[]).map(n=>`<div class="err">⚠ ${esc(n)}</div>`).join('')}
+     <div style="margin-top:10px"><b>En iyi zamanlar (senin hesabında)</b><br>${bt.enough?`<small>${bt.blocks.map(b=>`<span class="pill">${esc(b.name)} · ort. ${fmt(b.avg)} (${b.n} gönderi)</span>`).join('')}<br>${bt.days.slice(0,3).map(b=>`<span class="pill">${esc(b.name)} · ort. ${fmt(b.avg)} (${b.n})</span>`).join('')}<br>${esc(bt.note)}</small>`:`<small>${esc(bt.note)}</small>`}</div>
+     <div class="tw" style="margin-top:12px"><table><tr><th>Gönderi</th><th onclick="SORT='time';renderAn()">Tarih</th><th onclick="SORT='views';renderAn()">İzlenme</th><th onclick="SORT='reach';renderAn()">Erişim</th><th onclick="SORT='likes';renderAn()">Beğeni</th><th onclick="SORT='comments';renderAn()">Yorum</th><th onclick="SORT='shares';renderAn()">Paylaşım</th><th onclick="SORT='saved';renderAn()">Kayıt</th><th onclick="SORT='follows';renderAn()">Takip</th><th></th></tr>
+     ${posts.map(p=>`<tr><td>${p.thumb?`<img class="thumb" src="${esc(p.thumb)}" loading="lazy" referrerpolicy="no-referrer">`:''}${esc((p.caption||'(açıklamasız)').slice(0,50))}${p.privacy==='private'?' <small class="err">özel</small>':''}</td><td>${p.time?new Date(p.time).toLocaleDateString('tr-TR'):'–'}</td>${['views','reach','likes','comments','shares','saved','follows'].map(m=>`<td>${fmt(p.metrics[m])}</td>`).join('')}<td><a href="${esc(p.url)}" target="_blank" rel="noopener">aç</a> · <a href="#" style="color:#fca5a5" onclick="rm('${k}','${esc(p.id)}');return false">sil</a></td></tr>`).join('')||'<tr><td colspan="10"><small>Gönderi yok.</small></td></tr>'}</table></div></div>`}).join('');
+}
+async function rm(platform,id){
+  if(platform!=='youtube'){alert(PN[platform]+' API\'si dışarıdan silmeye izin vermiyor. "aç"a tıkla, gönderiyi uygulamada sil.');return}
+  if(!confirm('Bu YouTube videosu kalıcı olarak silinsin mi?'))return;
+  try{await post('/api/remove',{ws:WS,platform,id});loadAn(true)}catch(e){alert(e.message)}}
+$('insb').onclick=async()=>{
+  if(!S.ai.configured){setup('ai');return}
+  $('insb').disabled=true;$('insm').textContent=' Veriyi inceliyorum...';
+  try{const j=await post('/api/insights',{ws:WS});
+    $('ins').innerHTML=`<div class="card"><b>✨ ${esc(j.headline)}</b>
+      <ul class="f">${(j.findings||[]).map(f=>`<li>${esc(f.text)}<br><small>Dayanak: ${esc(f.evidence)}</small></li>`).join('')}</ul>
+      <b>Sıradaki paylaşım fikirleri</b><ul class="f">${(j.next_posts||[]).map(f=>`<li>${esc(f.idea)}<br><small>${esc(f.why)}</small></li>`).join('')}</ul>
+      <b>Platform notları</b><ul class="f">${Object.entries(j.platform_advice||{}).filter(([,v])=>v).map(([k,v])=>`<li><b>${esc(PN[k]||k)}:</b> ${esc(v)}</li>`).join('')}</ul>
+      ${(j.caveats||[]).map(c=>`<small>⚠ ${esc(c)}</small><br>`).join('')}<small>Bu yorum yapay zekanın verdiğin sayılardan çıkardığı bir okumadır, kesin hüküm değildir.</small></div>`;
+    $('insm').textContent='';
+  }catch(e){$('insm').textContent=' '+e.message}
+  $('insb').disabled=false};
+
+/* ---- yeni paylaşım ---- */
+// Genel kabul gören yayın aralıkları (Türkiye saati). Kesin veri değil; Analiz sekmesindeki "senin hesabında en iyi zamanlar" daha güvenilir.
 const SUG={instagram:{wd:[19,30],we:[12,0]},youtube:{wd:[18,0],we:[11,0]},tiktok:{wd:[21,0],we:[15,0]}};
 const loc=d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
 function sugTime(p,day){const d=new Date(day),we=[0,6].includes(d.getDay()),[h,m]=(SUG[p]||SUG.instagram)[we?'we':'wd'];d.setHours(h,m,0,0);return d}
 function future(d){while(d<new Date())d.setDate(d.getDate()+1);return d}
 const picked=()=>[...document.querySelectorAll('#plats input:checked')].map(i=>i.value);
-function openNew(day){
-  const p=picked()[0]||'instagram';$('when').value=loc(future(sugTime(p,day)));showSug();$('dlg').showModal()}
+function openNew(day){const p=picked()[0]||'instagram';$('when').value=loc(future(sugTime(p,day)));showSug();$('dlg').showModal()}
 function showSug(){const base=$('when').value?new Date($('when').value):new Date();
   $('sug').innerHTML='<br>Önerilen saatler (genel aralıklar, garanti değil): '+picked().map(p=>`${S.accounts[p].label} ${future(sugTime(p,base)).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}`).join(' · ')}
 $('when').onchange=showSug;$('plats').onchange=showSug;
@@ -111,19 +191,16 @@ $('file').onchange=()=>{const f=$('file').files[0];$('chk').innerHTML='';if(!f)r
     if(d>180)n.push('3 dakikayı geçiyor: YouTube\'da Short olmaz (normal video), Reels\'te önerilmez.');
     if(d>600)n.push('TikTok 10 dakika sınırını aşıyor.');
     if(mb>64)n.push('64MB üstü: bot TikTok\'a göndermez, küçült.');
-    $('chk').innerHTML=`<small>${w}×${h} · ${Math.round(d)} sn · ${mb.toFixed(1)} MB</small>`+(n.length?n.map(t=>`<div class="err">⚠ ${t}</div>`).join(''):'<div style="color:#4ade80;font-size:12px">✓ Boyut ve süre üç platforma uygun görünüyor.</div>');URL.revokeObjectURL(v.src)};
+    $('chk').innerHTML=`<small>${w}×${h} · ${Math.round(d)} sn · ${mb.toFixed(1)} MB</small>`+(n.length?n.map(t=>`<div class="err">⚠ ${t}</div>`).join(''):'<div class="ok" style="font-size:12px">✓ Boyut ve süre üç platforma uygun görünüyor.</div>');URL.revokeObjectURL(v.src)};
   v.src=URL.createObjectURL(f)};
 $('ai').onclick=async()=>{
-  if(!S.ai?.configured){$('dlg').close();setup('ai');return}
+  if(!S.ai.configured){$('dlg').close();setup('ai');return}
   $('ai').disabled=true;$('aimsg').textContent=' İzliyorum, 1 dakika kadar sürebilir...';
-  try{const url=await ensureUrl();
-    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_url:url})});
-    const j=await r.json();if(!r.ok)throw new Error(j.error);
+  try{const url=await ensureUrl(),j=await post('/api/analyze',{video_url:url});
     $('title').value=j.youtube_title||'';
     $('cap').value=(j.caption||'')+'\n\n'+(j.hashtags||[]).map(t=>'#'+String(t).replace(/^#/,'')).join(' ');
     const n=j.platform_notes||{};
-    $('aiinfo').innerHTML=`<small><b>Videoda gördüğüm/duyduğum:</b> ${esc(j.summary)}<br>Yanlışsa yazıyı düzelt.</small>`+
-      (j.warnings?.length?j.warnings.map(w=>`<div class="err">⚠ ${esc(w)}</div>`).join(''):'')+
+    $('aiinfo').innerHTML=`<small><b>Videoda gördüğüm/duyduğum:</b> ${esc(j.summary)}<br>Yanlışsa yazıyı düzelt.</small>`+(j.warnings?.length?j.warnings.map(w=>`<div class="err">⚠ ${esc(w)}</div>`).join(''):'')+
       `<small>${['instagram','youtube','tiktok'].filter(k=>n[k]).map(k=>`<br>${esc(k)}: ${esc(n[k])}`).join('')}</small>`;
     $('aimsg').textContent=' Hazır.';
   }catch(e){$('aimsg').textContent=' '+e.message}
@@ -134,12 +211,9 @@ $('go').onclick=async()=>{
     const url=await ensureUrl(),platforms=picked();if(!platforms.length)throw new Error('platform seç');
     const base=$('when').value?new Date($('when').value):null,split=document.querySelector('[name=mode]:checked').value==='split';
     const jobs=split?platforms.map(p=>({platforms:[p],at:future(sugTime(p,base||new Date()))})):[{platforms,at:base}];
-    for(const j of jobs){
-      const r=await fetch('/api/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_url:url,caption:$('cap').value,title:$('title').value,platforms:j.platforms,scheduled_at:j.at?j.at.toISOString():null})});
-      if(!r.ok)throw new Error((await r.json()).error)}
+    for(const j of jobs)await post('/api/posts',{ws:WS,video_url:url,caption:$('cap').value,title:$('title').value,platforms:j.platforms,scheduled_at:j.at?j.at.toISOString():null});
     $('dlg').close();$('fm').reset();UP=null;$('chk').innerHTML='';$('aiinfo').innerHTML='';$('msg').textContent='';load();
   }catch(e){$('msg').textContent=e.message}
-  $('go').disabled=false;
-};
-load();setInterval(load,20000);
+  $('go').disabled=false};
+load();setInterval(()=>{if(VIEW==='cal')load()},20000);
 </script></body></html>
