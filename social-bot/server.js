@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { pool, init, saveAccount, getAccount, loadSettings, setSetting, cfg } from './db.js';
 import { providers } from './providers.js';
 import { startScheduler } from './scheduler.js';
+import { analyzeVideo } from './ai.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(here, 'data');
@@ -86,15 +87,45 @@ app.get('/api/state', async (_req, res) => {
     accounts[k] = { label: p.label, configured: p.configured(), connected: !!acc, handle: acc?.handle ?? null, keys: p.keys, steps: p.steps, redirect: `${BASE_URL}/oauth/${k}/callback`, have: Object.fromEntries(p.keys.map((x) => [x, !!cfg(x)])) };
   }
   const { rows } = await pool.query('select * from posts order by scheduled_at desc limit 50');
-  res.json({ accounts, posts: rows });
+  const ai = {
+    label: 'Yapay zeka',
+    configured: !!cfg('GEMINI_API_KEY'),
+    keys: ['GEMINI_API_KEY'],
+    redirect: '',
+    have: { GEMINI_API_KEY: !!cfg('GEMINI_API_KEY') },
+    steps: [
+      'aistudio.google.com/apikey adresine git ve Google hesabınla gir.',
+      '"Create API key" de ve çıkan anahtarı aşağıya yapıştır.',
+      'Ücretsiz bir katmanı var (limitleri Google belirler). Video buraya yüklenir, yazı oluşturulunca silinir.',
+    ],
+  };
+  res.json({ accounts, ai, posts: rows });
 });
 
 app.post('/api/settings', async (req, res) => {
-  const allowed = new Set(Object.values(providers).flatMap((p) => p.keys));
+  const allowed = new Set([...Object.values(providers).flatMap((p) => p.keys), 'GEMINI_API_KEY']);
   for (const [k, v] of Object.entries(req.body?.values ?? {})) {
     if (allowed.has(k) && typeof v === 'string' && v.trim()) await setSetting(k, v.trim());
   }
   res.json({ ok: true });
+});
+
+app.post('/api/analyze', async (req, res) => {
+  try {
+    const url = String(req.body?.video_url ?? '');
+    let buf;
+    const local = url.startsWith(`${BASE_URL}/media/`) && path.join(MEDIA_DIR, path.basename(url));
+    if (local && fs.existsSync(local)) buf = fs.readFileSync(local);
+    else {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error('video indirilemedi: ' + r.status);
+      buf = Buffer.from(await r.arrayBuffer());
+    }
+    if (buf.length > 150 * 1024 * 1024) throw new Error('Video 150MB üstü, analiz için küçült');
+    res.json(await analyzeVideo(buf));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/upload', async (req, res) => {

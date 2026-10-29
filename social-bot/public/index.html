@@ -41,10 +41,15 @@ label.c{display:inline-flex;gap:6px;align-items:center;margin:6px 12px 6px 0}lab
   <h3 style="margin-top:0">Yeni paylaşım</h3>
   <input type="file" id="file" accept="video/mp4,video/quicktime">
   <input id="url" placeholder="veya herkese açık video linki (mp4)">
+  <div id="chk"></div>
+  <div class="row" style="margin:6px 0"><button class="btn g" id="ai" type="button">✨ Videoyu izle, yazıyı oluştur</button><small id="aimsg"></small></div>
   <input id="title" placeholder="Başlık (YouTube)">
-  <textarea id="cap" rows="4" placeholder="Açıklama / hashtagler"></textarea>
+  <textarea id="cap" rows="5" placeholder="Açıklama / hashtagler"></textarea>
+  <div id="aiinfo"></div>
   <div id="plats"></div>
-  <input type="datetime-local" id="when"><small>Boş bırakırsan hemen paylaşır.</small>
+  <label class="c"><input type="radio" name="mode" value="same" checked>Hepsi aynı anda</label>
+  <label class="c"><input type="radio" name="mode" value="split">Her platform kendi önerilen saatinde</label>
+  <input type="datetime-local" id="when"><small id="sug"></small>
   <div class="row" style="margin-top:12px"><button class="btn" id="go" type="button">Zamanla</button><button class="btn g" value="x">Vazgeç</button><span id="msg"></span></div>
 </form></dialog>
 <script>
@@ -57,6 +62,7 @@ async function load(){
 }
 function draw(){
   $('accs').innerHTML=Object.entries(S.accounts).map(([k,a])=>`<div class="acc"><span class="dot ${a.connected?'on':''}"></span>${esc(a.label)}${a.connected?` <small>${esc(a.handle||'')}</small>`:''} ${a.configured?`<a href="/connect/${k}">${a.connected?'yenile':'bağla'}</a>`:''} <a href="#" onclick="setup('${k}');return false">${a.configured?'ayar':'<b>kurulum</b>'}</a></div>`).join('');
+  $('accs').innerHTML+=`<div class="acc"><span class="dot ${S.ai.configured?'on':''}"></span>Yapay zeka <a href="#" onclick="setup('ai');return false">${S.ai.configured?'ayar':'<b>kurulum</b>'}</a></div>`;
   $('plats').innerHTML=Object.entries(S.accounts).filter(([,a])=>a.connected).map(([k,a])=>`<label class="c"><input type="checkbox" value="${k}" checked>${esc(a.label)}</label>`).join('')||'<small>Önce bir hesap bağla.</small>';
   $('mt').textContent=cur.toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
   const first=new Date(cur),start=new Date(first);start.setDate(1-((first.getDay()+6)%7));
@@ -64,31 +70,74 @@ function draw(){
   const today=new Date().toDateString();
   for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);
     const ps=S.posts.filter(p=>new Date(p.scheduled_at).toDateString()===d.toDateString());
-    h+=`<div class="${d.toDateString()===today?'today':''} ${d.getMonth()!==cur.getMonth()?'o':''}">${d.getDate()}${ps.map(p=>`<span class="chip ${p.status}" title="${esc(p.caption)}">${new Date(p.scheduled_at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})} ${esc(p.caption||p.title||'video')}</span>`).join('')}</div>`}
+    h+=`<div style="cursor:pointer" onclick="openNew(new Date(${d.getTime()}))" class="${d.toDateString()===today?'today':''} ${d.getMonth()!==cur.getMonth()?'o':''}">${d.getDate()}${ps.map(p=>`<span class="chip ${p.status}" title="${esc(p.caption)}">${new Date(p.scheduled_at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})} ${esc(p.caption||p.title||'video')}</span>`).join('')}</div>`}
   $('cal').innerHTML=h;
   $('list').innerHTML=S.posts.slice(0,15).map(p=>`<div style="padding:10px 0;border-top:1px solid var(--line)"><b>${p.status}</b> · ${new Date(p.scheduled_at).toLocaleString('tr-TR')} · ${esc(p.platforms.join(', '))}
    ${['scheduled','failed'].includes(p.status)?`<a href="#" onclick="del(${p.id});return false" style="float:right;color:#fca5a5">sil</a>`:''}<br><small>${esc(p.caption.slice(0,80))}</small>
    ${Object.entries(p.results).map(([k,r])=>r.ok?`<br><span style="color:#4ade80">${k} ✓</span>`:`<br><span class="err">${k}: ${esc(r.error)}</span>`).join('')}</div>`).join('')||'<br><small>Henüz yok.</small>';
 }
 let SK=null;
-function setup(k){const a=S.accounts[k];SK=a;$('sh').textContent=a.label+' kurulumu';$('ss').innerHTML=a.steps.map(t=>`<li>${esc(t)}</li>`).join('');$('sr').value=a.redirect;
+function setup(k){const a=S.accounts[k]||S.ai;SK=a;$('sh').textContent=a.label+' kurulumu';$('ss').innerHTML=a.steps.map(t=>`<li>${esc(t)}</li>`).join('');$('sr').value=a.redirect;$('sr').style.display=a.redirect?'':'none';
   $('sk').innerHTML=a.keys.map(x=>`<input data-k="${x}" placeholder="${x}${a.have[x]?' (kayıtlı, değiştirmek için yaz)':''}" autocomplete="off">`).join('');$('smsg').textContent='';$('sdlg').showModal()}
 $('ssave').onclick=async()=>{const values={};document.querySelectorAll('#sk input').forEach(i=>{if(i.value.trim())values[i.dataset.k]=i.value.trim()});
   const r=await fetch('/api/settings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({values})});
   $('smsg').textContent=r.ok?'Kaydedildi ✓ — şimdi "bağla"ya bas':'Hata';await load()};
 async function del(id){await fetch('/api/posts/'+id,{method:'DELETE'});load()}
 $('prev').onclick=()=>{cur.setMonth(cur.getMonth()-1);draw()};$('next').onclick=()=>{cur.setMonth(cur.getMonth()+1);draw()};
-$('new').onclick=()=>$('dlg').showModal();
+$('new').onclick=()=>openNew(new Date());
 $('out').onclick=async()=>{await fetch('/logout',{method:'POST'});location.href='/login'};
+
+// Genel kabul gören yayın aralıkları (Türkiye saati). Kesin veri değil; kendi hesabının istatistiklerine bakıp ayarla.
+const SUG={instagram:{wd:[19,30],we:[12,0]},youtube:{wd:[18,0],we:[11,0]},tiktok:{wd:[21,0],we:[15,0]}};
+const loc=d=>new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,16);
+function sugTime(p,day){const d=new Date(day),we=[0,6].includes(d.getDay()),[h,m]=(SUG[p]||SUG.instagram)[we?'we':'wd'];d.setHours(h,m,0,0);return d}
+function future(d){while(d<new Date())d.setDate(d.getDate()+1);return d}
+const picked=()=>[...document.querySelectorAll('#plats input:checked')].map(i=>i.value);
+function openNew(day){
+  const p=picked()[0]||'instagram';$('when').value=loc(future(sugTime(p,day)));showSug();$('dlg').showModal()}
+function showSug(){const base=$('when').value?new Date($('when').value):new Date();
+  $('sug').innerHTML='<br>Önerilen saatler (genel aralıklar, garanti değil): '+picked().map(p=>`${S.accounts[p].label} ${future(sugTime(p,base)).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})}`).join(' · ')}
+$('when').onchange=showSug;$('plats').onchange=showSug;
+let UP=null;
+async function ensureUrl(){const f=$('file').files[0];
+  if(f){const key=f.name+f.size;if(UP?.key===key)return UP.url;
+    const r=await fetch('/upload',{method:'POST',body:f});if(!r.ok)throw new Error('yükleme başarısız');UP={key,url:(await r.json()).url};return UP.url}
+  const u=$('url').value.trim();if(!u)throw new Error('video seç veya link yaz');return u}
+$('file').onchange=()=>{const f=$('file').files[0];$('chk').innerHTML='';if(!f)return;
+  const v=document.createElement('video');v.preload='metadata';
+  v.onloadedmetadata=()=>{const w=v.videoWidth,h=v.videoHeight,d=v.duration,mb=f.size/1048576,n=[];
+    if(w>=h)n.push('Yatay video: Reels/TikTok/Shorts dikey (9:16) ister, yoksa kırpılır veya siyah bant girer.');
+    if(Math.min(w,h)<720)n.push('Çözünürlük düşük (720p altı), görüntü bulanık çıkabilir.');
+    if(d>180)n.push('3 dakikayı geçiyor: YouTube\'da Short olmaz (normal video), Reels\'te önerilmez.');
+    if(d>600)n.push('TikTok 10 dakika sınırını aşıyor.');
+    if(mb>64)n.push('64MB üstü: bot TikTok\'a göndermez, küçült.');
+    $('chk').innerHTML=`<small>${w}×${h} · ${Math.round(d)} sn · ${mb.toFixed(1)} MB</small>`+(n.length?n.map(t=>`<div class="err">⚠ ${t}</div>`).join(''):'<div style="color:#4ade80;font-size:12px">✓ Boyut ve süre üç platforma uygun görünüyor.</div>');URL.revokeObjectURL(v.src)};
+  v.src=URL.createObjectURL(f)};
+$('ai').onclick=async()=>{
+  if(!S.ai?.configured){$('dlg').close();setup('ai');return}
+  $('ai').disabled=true;$('aimsg').textContent=' İzliyorum, 1 dakika kadar sürebilir...';
+  try{const url=await ensureUrl();
+    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_url:url})});
+    const j=await r.json();if(!r.ok)throw new Error(j.error);
+    $('title').value=j.youtube_title||'';
+    $('cap').value=(j.caption||'')+'\n\n'+(j.hashtags||[]).map(t=>'#'+String(t).replace(/^#/,'')).join(' ');
+    const n=j.platform_notes||{};
+    $('aiinfo').innerHTML=`<small><b>Videoda gördüğüm/duyduğum:</b> ${esc(j.summary)}<br>Yanlışsa yazıyı düzelt.</small>`+
+      (j.warnings?.length?j.warnings.map(w=>`<div class="err">⚠ ${esc(w)}</div>`).join(''):'')+
+      `<small>${['instagram','youtube','tiktok'].filter(k=>n[k]).map(k=>`<br>${esc(k)}: ${esc(n[k])}`).join('')}</small>`;
+    $('aimsg').textContent=' Hazır.';
+  }catch(e){$('aimsg').textContent=' '+e.message}
+  $('ai').disabled=false};
 $('go').onclick=async()=>{
   $('go').disabled=true;$('msg').textContent='Yükleniyor...';
   try{
-    let url=$('url').value.trim();const f=$('file').files[0];
-    if(f){const r=await fetch('/upload',{method:'POST',body:f});if(!r.ok)throw new Error('yükleme başarısız');url=(await r.json()).url}
-    const platforms=[...document.querySelectorAll('#plats input:checked')].map(i=>i.value),w=$('when').value;
-    const r=await fetch('/api/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_url:url,caption:$('cap').value,title:$('title').value,platforms,scheduled_at:w?new Date(w).toISOString():null})});
-    if(!r.ok)throw new Error((await r.json()).error);
-    $('dlg').close();$('fm').reset();$('msg').textContent='';load();
+    const url=await ensureUrl(),platforms=picked();if(!platforms.length)throw new Error('platform seç');
+    const base=$('when').value?new Date($('when').value):null,split=document.querySelector('[name=mode]:checked').value==='split';
+    const jobs=split?platforms.map(p=>({platforms:[p],at:future(sugTime(p,base||new Date()))})):[{platforms,at:base}];
+    for(const j of jobs){
+      const r=await fetch('/api/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_url:url,caption:$('cap').value,title:$('title').value,platforms:j.platforms,scheduled_at:j.at?j.at.toISOString():null})});
+      if(!r.ok)throw new Error((await r.json()).error)}
+    $('dlg').close();$('fm').reset();UP=null;$('chk').innerHTML='';$('aiinfo').innerHTML='';$('msg').textContent='';load();
   }catch(e){$('msg').textContent=e.message}
   $('go').disabled=false;
 };
