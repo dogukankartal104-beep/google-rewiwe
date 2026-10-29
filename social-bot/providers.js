@@ -167,7 +167,7 @@ const tiktok = {
     'https://www.tiktok.com/v2/auth/authorize/?' +
     new URLSearchParams({
       client_key: env.TIKTOK_CLIENT_KEY,
-      scope: 'user.info.basic,video.publish',
+      scope: 'user.info.basic,video.publish,video.upload',
       response_type: 'code',
       redirect_uri: redirect('tiktok'),
       state,
@@ -221,11 +221,13 @@ const tiktok = {
     const video = await download(post.video_url);
     if (video.length > 64 * 1024 * 1024) throw new Error('TikTok için video 64MB üstü, küçült');
     const headers = { Authorization: `Bearer ${acc.access_token}`, 'Content-Type': 'application/json; charset=UTF-8' };
-    const init = await j(`${TT}/post/publish/video/init/`, {
+    // inbox: video TikTok taslaklarına düşer, uygulamadan tek dokunuşla yayınlarsın (denetim gerekmez)
+    const inbox = env.TIKTOK_MODE === 'inbox';
+    const init = await j(`${TT}/post/publish/${inbox ? 'inbox/video' : 'video'}/init/`, {
       method: 'POST',
       headers,
       body: JSON.stringify({
-        post_info: { title: post.caption.slice(0, 2200), privacy_level: env.TIKTOK_PRIVACY || 'SELF_ONLY' },
+        ...(inbox ? {} : { post_info: { title: post.caption.slice(0, 2200), privacy_level: env.TIKTOK_PRIVACY || 'SELF_ONLY' } }),
         source_info: { source: 'FILE_UPLOAD', video_size: video.length, chunk_size: video.length, total_chunk_count: 1 },
       }),
     });
@@ -244,7 +246,7 @@ const tiktok = {
     for (let i = 0; i < 60; i++) {
       const s = await j(`${TT}/post/publish/status/fetch/`, { method: 'POST', headers, body: JSON.stringify({ publish_id }) });
       const st = s.data?.status;
-      if (st === 'PUBLISH_COMPLETE') return publish_id;
+      if (st === 'PUBLISH_COMPLETE' || (inbox && st === 'SEND_TO_USER_INBOX')) return publish_id;
       if (st === 'FAILED') throw new Error('TikTok başarısız: ' + (s.data?.fail_reason || 'bilinmiyor'));
       await sleep(5000);
     }

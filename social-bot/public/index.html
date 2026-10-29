@@ -2,41 +2,86 @@
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Social Bot</title>
 <style>
-body{font:16px system-ui;max-width:640px;margin:0 auto;padding:16px;background:#111;color:#eee}
-h2{margin:24px 0 8px}input,textarea,button{font:inherit;width:100%;box-sizing:border-box;padding:10px;margin:4px 0;border-radius:8px;border:1px solid #444;background:#1c1c1c;color:#eee}
-button{background:#3b82f6;border:0;cursor:pointer}label.c{display:inline-flex;align-items:center;gap:6px;margin-right:12px}label.c input{width:auto}
-.acc,.post{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-bottom:1px solid #333}a{color:#7cb7ff}.err{color:#f87171;font-size:13px}.ok{color:#4ade80}
+:root{--bg:#0b0b10;--card:#15151d;--line:#262633;--mut:#8b8b9a;--ac:linear-gradient(135deg,#6366f1,#ec4899)}
+*{box-sizing:border-box}body{margin:0;font:15px system-ui,sans-serif;background:var(--bg);color:#f4f4f5}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg);z-index:5}
+header b{font-size:18px}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+main{max-width:1100px;margin:0 auto;padding:20px}
+.btn{border:0;border-radius:10px;padding:10px 16px;font:inherit;font-weight:600;color:#fff;background:var(--ac);cursor:pointer}
+.btn.g{background:#22222e;font-weight:500}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:16px}
+.acc{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;background:#1d1d28;font-size:14px}
+.dot{width:8px;height:8px;border-radius:50%;background:#52525b}.dot.on{background:#4ade80}
+.acc a{color:#a5b4fc;text-decoration:none}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.cal>div{background:var(--card);min-height:92px;padding:6px;font-size:12px;color:var(--mut)}
+.cal .h{min-height:0;text-align:center;font-weight:600;padding:8px}
+.cal .today{background:#1b1b2c}.cal .o{opacity:.4}
+.chip{display:block;margin-top:4px;padding:3px 6px;border-radius:6px;font-size:11px;color:#fff;background:#4f46e5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chip.done{background:#16a34a}.chip.failed{background:#dc2626}.chip.partial{background:#d97706}.chip.running{background:#0891b2}
+.mon{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.mon h2{margin:0;font-size:18px}.mon button{width:36px}
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--card);color:#f4f4f5;width:min(480px,94vw);padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.65)}
+input,textarea{width:100%;margin:5px 0;padding:11px;border-radius:10px;border:1px solid var(--line);background:#0f0f16;color:#fff;font:inherit}
+label.c{display:inline-flex;gap:6px;align-items:center;margin:6px 12px 6px 0}label.c input{width:auto;margin:0}
+.err{color:#fca5a5;font-size:12px}small{color:var(--mut)}
 </style></head><body>
-<h1>Social Bot</h1>
-<h2>Hesaplar</h2><div id="accs"></div>
-<h2>Yeni paylaşım</h2>
-<input type="file" id="file" accept="video/mp4,video/quicktime">
-<input id="url" placeholder="veya video linki (herkese açık mp4)">
-<input id="title" placeholder="Başlık (YouTube için)">
-<textarea id="cap" rows="4" placeholder="Açıklama / caption"></textarea>
-<div id="plats"></div>
-<input type="datetime-local" id="when">
-<button id="go">Zamanla</button><div id="msg"></div>
-<h2>Paylaşımlar</h2><div id="posts"></div>
+<header><b>▶ Social Bot</b><div class="row"><button class="btn" id="new">+ Yeni paylaşım</button><button class="btn g" id="out">Çıkış</button></div></header>
+<main>
+  <div class="card row" id="accs"></div>
+  <div class="mon"><button class="btn g" id="prev">‹</button><h2 id="mt"></h2><button class="btn g" id="next">›</button></div>
+  <div class="cal" id="cal"></div>
+  <div class="card" style="margin-top:16px"><b>Son paylaşımlar</b><div id="list"></div></div>
+</main>
+<dialog id="dlg"><form method="dialog" id="fm">
+  <h3 style="margin-top:0">Yeni paylaşım</h3>
+  <input type="file" id="file" accept="video/mp4,video/quicktime">
+  <input id="url" placeholder="veya herkese açık video linki (mp4)">
+  <input id="title" placeholder="Başlık (YouTube)">
+  <textarea id="cap" rows="4" placeholder="Açıklama / hashtagler"></textarea>
+  <div id="plats"></div>
+  <input type="datetime-local" id="when"><small>Boş bırakırsan hemen paylaşır.</small>
+  <div class="row" style="margin-top:12px"><button class="btn" id="go" type="button">Zamanla</button><button class="btn g" value="x">Vazgeç</button><span id="msg"></span></div>
+</form></dialog>
 <script>
 const $=id=>document.getElementById(id);
+let S={accounts:{},posts:[]},cur=new Date();cur.setDate(1);
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function load(){
-  const s=await (await fetch('/api/state')).json();
-  $('accs').innerHTML=Object.entries(s.accounts).map(([k,a])=>`<div class="acc"><span>${a.label} ${a.connected?`<b class=ok>✓ ${a.handle||''}</b>`:''}</span>${a.configured?`<a href="/connect/${k}">${a.connected?'Yeniden bağla':'Bağla'}</a>`:'<span class=err>anahtar yok</span>'}</div>`).join('');
-  $('plats').innerHTML=Object.entries(s.accounts).filter(([,a])=>a.connected).map(([k,a])=>`<label class=c><input type=checkbox value="${k}" checked>${a.label}</label>`).join('');
-  $('posts').innerHTML=s.posts.map(p=>`<div class="post"><div><b>${p.status}</b> · ${new Date(p.scheduled_at).toLocaleString('tr-TR')}<br>${p.caption.slice(0,60)}<br>${Object.entries(p.results).map(([k,r])=>r.ok?`<span class=ok>${k} ✓</span> `:`<span class=err>${k}: ${r.error}</span><br>`).join('')}</div>${['scheduled','failed'].includes(p.status)?`<a href="#" onclick="del(${p.id});return false">sil</a>`:''}</div>`).join('');
+  const r=await fetch('/api/state');if(r.status===401)return location.href='/login';
+  S=await r.json();draw();
+}
+function draw(){
+  $('accs').innerHTML=Object.entries(S.accounts).map(([k,a])=>`<div class="acc"><span class="dot ${a.connected?'on':''}"></span>${esc(a.label)}${a.connected?` <small>${esc(a.handle||'')}</small>`:''} ${a.configured?`<a href="/connect/${k}">${a.connected?'yenile':'bağla'}</a>`:'<small class="err">anahtar yok</small>'}</div>`).join('');
+  $('plats').innerHTML=Object.entries(S.accounts).filter(([,a])=>a.connected).map(([k,a])=>`<label class="c"><input type="checkbox" value="${k}" checked>${esc(a.label)}</label>`).join('')||'<small>Önce bir hesap bağla.</small>';
+  $('mt').textContent=cur.toLocaleDateString('tr-TR',{month:'long',year:'numeric'});
+  const first=new Date(cur),start=new Date(first);start.setDate(1-((first.getDay()+6)%7));
+  let h=['Pzt','Sal','Çar','Per','Cum','Cmt','Paz'].map(d=>`<div class="h">${d}</div>`).join('');
+  const today=new Date().toDateString();
+  for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);
+    const ps=S.posts.filter(p=>new Date(p.scheduled_at).toDateString()===d.toDateString());
+    h+=`<div class="${d.toDateString()===today?'today':''} ${d.getMonth()!==cur.getMonth()?'o':''}">${d.getDate()}${ps.map(p=>`<span class="chip ${p.status}" title="${esc(p.caption)}">${new Date(p.scheduled_at).toLocaleTimeString('tr-TR',{hour:'2-digit',minute:'2-digit'})} ${esc(p.caption||p.title||'video')}</span>`).join('')}</div>`}
+  $('cal').innerHTML=h;
+  $('list').innerHTML=S.posts.slice(0,15).map(p=>`<div style="padding:10px 0;border-top:1px solid var(--line)"><b>${p.status}</b> · ${new Date(p.scheduled_at).toLocaleString('tr-TR')} · ${esc(p.platforms.join(', '))}
+   ${['scheduled','failed'].includes(p.status)?`<a href="#" onclick="del(${p.id});return false" style="float:right;color:#fca5a5">sil</a>`:''}<br><small>${esc(p.caption.slice(0,80))}</small>
+   ${Object.entries(p.results).map(([k,r])=>r.ok?`<br><span style="color:#4ade80">${k} ✓</span>`:`<br><span class="err">${k}: ${esc(r.error)}</span>`).join('')}</div>`).join('')||'<br><small>Henüz yok.</small>';
 }
 async function del(id){await fetch('/api/posts/'+id,{method:'DELETE'});load()}
+$('prev').onclick=()=>{cur.setMonth(cur.getMonth()-1);draw()};$('next').onclick=()=>{cur.setMonth(cur.getMonth()+1);draw()};
+$('new').onclick=()=>$('dlg').showModal();
+$('out').onclick=async()=>{await fetch('/logout',{method:'POST'});location.href='/login'};
 $('go').onclick=async()=>{
-  $('msg').textContent='Gönderiliyor...';
-  let url=$('url').value.trim();
-  const f=$('file').files[0];
-  if(f){const r=await fetch('/upload',{method:'POST',body:f});url=(await r.json()).url}
-  const platforms=[...document.querySelectorAll('#plats input:checked')].map(i=>i.value);
-  const w=$('when').value;
-  const r=await fetch('/api/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_url:url,caption:$('cap').value,title:$('title').value,platforms,scheduled_at:w?new Date(w).toISOString():null})});
-  $('msg').textContent=r.ok?'Zamanlandı ✓':'Hata: '+(await r.json()).error;
-  load();
+  $('go').disabled=true;$('msg').textContent='Yükleniyor...';
+  try{
+    let url=$('url').value.trim();const f=$('file').files[0];
+    if(f){const r=await fetch('/upload',{method:'POST',body:f});if(!r.ok)throw new Error('yükleme başarısız');url=(await r.json()).url}
+    const platforms=[...document.querySelectorAll('#plats input:checked')].map(i=>i.value),w=$('when').value;
+    const r=await fetch('/api/posts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({video_url:url,caption:$('cap').value,title:$('title').value,platforms,scheduled_at:w?new Date(w).toISOString():null})});
+    if(!r.ok)throw new Error((await r.json()).error);
+    $('dlg').close();$('fm').reset();$('msg').textContent='';load();
+  }catch(e){$('msg').textContent=e.message}
+  $('go').disabled=false;
 };
-load();setInterval(load,15000);
+load();setInterval(load,20000);
 </script></body></html>

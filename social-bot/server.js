@@ -20,15 +20,39 @@ if (!PASSWORD) throw new Error('ADMIN_PASSWORD ayarlanmalı');
 const app = express();
 const states = new Map();
 
-// Videolar ve OAuth dönüşleri açık; geri kalan her şey şifreli.
+// Açık: videolar, OAuth dönüşü, giriş, gizlilik/şartlar. Geri kalan her şey oturum ister.
 app.use('/media', express.static(MEDIA_DIR));
-const auth = (req, res, next) => {
-  const [, b64] = (req.headers.authorization || '').split(' ');
-  const [, pass = ''] = Buffer.from(b64 || '', 'base64').toString().split(/:(.*)/s);
-  const a = Buffer.from(pass), b = Buffer.from(PASSWORD);
-  if (a.length === b.length && crypto.timingSafeEqual(a, b)) return next();
-  res.set('WWW-Authenticate', 'Basic realm="social-bot"').status(401).send('Giriş gerekli');
+app.use(express.json());
+
+const sign = (v) => crypto.createHmac('sha256', PASSWORD).update(v).digest('hex');
+const cookieOf = (req, name) => (req.headers.cookie || '').split(/;\s*/).map((c) => c.split(/=(.*)/s)).find(([k]) => k === name)?.[1];
+const valid = (req) => {
+  const [exp, mac] = (cookieOf(req, 'sb') || '').split('.');
+  return !!mac && Number(exp) > Date.now() && mac.length === sign(exp).length && crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(sign(exp)));
 };
+const auth = (req, res, next) => {
+  if (valid(req)) return next();
+  if (req.method === 'GET' && req.accepts('html') && !req.path.startsWith('/api')) return res.redirect('/login');
+  res.status(401).json({ error: 'giriş gerekli' });
+};
+const page = (f) => (_req, res) => res.sendFile(path.join(here, 'public', f));
+app.get('/login', page('login.html'));
+app.get('/privacy', page('privacy.html'));
+app.get('/terms', page('terms.html'));
+app.post('/login', async (req, res) => {
+  const a = Buffer.from(String(req.body?.password ?? '')), b = Buffer.from(PASSWORD);
+  if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+    const exp = String(Date.now() + 30 * 864e5);
+    res.setHeader('Set-Cookie', `sb=${exp}.${sign(exp)}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${30 * 86400}`);
+    return res.json({ ok: true });
+  }
+  await new Promise((r) => setTimeout(r, 1000));
+  res.status(401).json({ error: 'Şifre yanlış' });
+});
+app.post('/logout', (_req, res) => {
+  res.setHeader('Set-Cookie', 'sb=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0');
+  res.json({ ok: true });
+});
 
 app.get('/oauth/:p/callback', async (req, res) => {
   const p = providers[req.params.p];
@@ -45,7 +69,6 @@ app.get('/oauth/:p/callback', async (req, res) => {
 });
 
 app.use(auth);
-app.use(express.json());
 app.use(express.static(path.join(here, 'public')));
 
 app.get('/connect/:p', (req, res) => {
