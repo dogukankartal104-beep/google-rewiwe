@@ -19,7 +19,9 @@ from pathlib import Path
 from openpyxl import Workbook
 from openpyxl.utils import get_column_letter
 from telethon import TelegramClient, errors, types
-from telethon.tl.functions.messages import CheckChatInviteRequest
+from telethon.tl.functions.messages import (
+    CheckChatInviteRequest, ExportChatInviteRequest, GetChatInviteImportersRequest,
+    HideAllChatJoinRequestsRequest)
 
 BASE = Path(__file__).parent
 DB_FILE = BASE / "veri.db"
@@ -36,6 +38,7 @@ def run(coro):
 
 
 class State:
+    auto = set()
     client = None
     phone = None
     phone_code_hash = None
@@ -207,6 +210,80 @@ async def scan(channel_ids=None, keep_log=False):
         S.job.update(running=False, done=True)
 
 
+def get_channels(ids=None):
+    with dblock:
+        if ids:
+            q = ",".join("?" * len(ids))
+            return [dict(r) for r in db.execute(f"SELECT * FROM channels WHERE id IN ({q})", ids)]
+        return [dict(r) for r in db.execute("SELECT * FROM channels")]
+
+
+async def admin_entity(client, ch):
+    ent = await resolve(client, ch["link"])
+    if not is_admin(ent):
+        raise PermissionError("bu hesap burada yonetici degil")
+    return ent
+
+
+async def announce(text, pin, ids):
+    S.job.update(running=True, done=False, log=[])
+    try:
+        client = await get_client()
+        for ch in get_channels(ids):
+            try:
+                ent = await admin_entity(client, ch)
+                msg = await client.send_message(ent, text, link_preview=True)
+                if pin:
+                    await client.pin_message(ent, msg, notify=False)
+                log(f"GONDERILDI {ch['title']}" + (" (sabitlendi)" if pin else ""))
+                await asyncio.sleep(2)
+            except errors.FloodWaitError as e:
+                log(f"HATA     {ch['title']}: Telegram {e.seconds} sn beklemeni istedi, durduruldu.")
+                break
+            except Exception as e:
+                log(f"HATA     {ch['title']}: {e}")
+        log("Bitti.")
+    finally:
+        S.job.update(running=False, done=True)
+
+
+async def make_request_link(channel_id, title):
+    client = await get_client()
+    ch = get_channels([channel_id])[0]
+    ent = await admin_entity(client, ch)
+    r = await client(ExportChatInviteRequest(ent, request_needed=True, title=(title or "Katilma istegi")[:32]))
+    return r.link
+
+
+async def pending_requests(channel_id):
+    client = await get_client()
+    ent = await admin_entity(client, get_channels([channel_id])[0])
+    r = await client(GetChatInviteImportersRequest(ent, offset_date=None, offset_user=types.InputUserEmpty(),
+                                                   limit=1, requested=True))
+    return r.count
+
+
+async def approve_all(channel_id):
+    client = await get_client()
+    ent = await admin_entity(client, get_channels([channel_id])[0])
+    n = await pending_requests(channel_id)
+    if n:
+        await client(HideAllChatJoinRequestsRequest(ent, approved=True))
+    return n
+
+
+async def auto_loop():
+    while True:
+        await asyncio.sleep(30)
+        for cid in list(S.auto):
+            try:
+                n = await approve_all(cid)
+                if n:
+                    log(f"OTOMATIK ONAY: {n} istek onaylandi (kanal {cid})")
+            except Exception as e:
+                log(f"OTOMATIK ONAY HATA (kanal {cid}): {e}")
+
+
 def dashboard():
     with dblock:
         chans = []
@@ -371,6 +448,23 @@ class H(BaseHTTPRequestHandler):
                 else:
                     asyncio.run_coroutine_threadsafe(scan([d["channel_id"]] if d.get("channel_id") else None), loop)
                 self.j({"ok": True})
+            elif self.path == "/api/announce":
+                if S.job["running"]:
+                    return self.j({"error": "Bir islem zaten calisiyor."}, 409)
+                if not d.get("text", "").strip():
+                    return self.j({"error": "Mesaj bos."}, 400)
+                asyncio.run_coroutine_threadsafe(
+                    announce(d["text"], bool(d.get("pin")), [d["channel_id"]] if d.get("channel_id") else None), loop)
+                self.j({"ok": True})
+            elif self.path == "/api/request_link":
+                self.j({"link": run(make_request_link(d["channel_id"], d.get("title")))})
+            elif self.path == "/api/pending":
+                self.j({"count": run(pending_requests(d["channel_id"]))})
+            elif self.path == "/api/approve":
+                self.j({"approved": run(approve_all(d["channel_id"]))})
+            elif self.path == "/api/auto":
+                (S.auto.add if d.get("on") else S.auto.discard)(d["channel_id"])
+                self.j({"auto": sorted(S.auto)})
             elif self.path == "/api/delete":
                 with dblock:
                     for t in ("members", "scans"):
@@ -389,6 +483,7 @@ class H(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    asyncio.run_coroutine_threadsafe(auto_loop(), loop)
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
     url = f"http://127.0.0.1:{PORT}"
     print(f"Panel aciliyor: {url}  (kapatmak icin Ctrl+C)")

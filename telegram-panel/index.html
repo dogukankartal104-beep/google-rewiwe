@@ -57,6 +57,22 @@ svg text{fill:var(--mut);font-size:11px}
   <pre id="log" class="hide"></pre></div>
 </div>
 
+<div class="grid">
+ <div class="card"><h2>Toplu duyuru</h2>
+  <p class="mut" style="margin:0 0 8px">Yönetici olduğun kanallara aynı mesajı gönderir (örneğin yeni kanalın davet bağlantısı).</p>
+  <textarea id="ann" placeholder="Yeni kanalımıza buradan katılabilirsiniz: https://t.me/+..."></textarea>
+  <div class="row" style="margin-top:8px"><select id="annch"></select>
+  <label class="mut"><input type="checkbox" id="pin" style="width:auto"> Sabitle</label>
+  <button onclick="announce()">Gönder</button></div></div>
+ <div class="card"><h2>Katılma istekleri</h2>
+  <p class="mut" style="margin:0 0 8px">Yeni kanalda onaylı bağlantı oluştur, gelen istekleri onayla.</p>
+  <div class="row"><select id="rqch"></select></div>
+  <div class="row" style="margin-top:8px"><button class="sec" onclick="rqLink()">Onaylı bağlantı oluştur</button>
+  <button class="sec" onclick="rqPending()">Bekleyenler</button><button onclick="rqApprove()">Hepsini onayla</button></div>
+  <label class="mut" style="display:block;margin-top:8px"><input type="checkbox" id="auto" style="width:auto" onchange="rqAuto()"> Otomatik onayla (30 sn, uygulama açıkken)</label>
+  <div id="rqout" style="margin-top:8px;word-break:break-all"></div></div>
+</div>
+
 <div class="card"><div class="row" style="margin-bottom:8px"><h2 style="flex:1;margin:0">Kanallar</h2>
  <button onclick="scanAll()" id="scanAll">Hepsini tara</button>
  <a class="btn sec" href="/download">Hepsini Excel indir</a></div>
@@ -96,7 +112,7 @@ async function load(){const d=await api('/api/dashboard');
   <td class="mut">${c.last_scan||'Henüz taranmadı'}</td>
   <td><button class="s" onclick="scanOne(${c.id})">Tara</button> <a class="btn sec s" href="/download?channel=${c.id}">Excel</a>
   <button class="sec s" onclick="del(${c.id},'${esc(c.title).replace(/'/g,'')}')">Sil</button></td></tr>`).join('')||'<tr><td colspan=6 class="mut">Henüz kanal yok. Sağ üstten davet bağlantısı ekle.</td></tr>';
- const sel=$('fch'),cur=sel.value;sel.innerHTML='<option value="">Tüm kanallar</option>'+d.channels.map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('');sel.value=cur;
+ const sel=$('fch'),cur=sel.value;sel.innerHTML='<option value="">Tüm kanallar</option>'+d.channels.map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('');sel.value=cur;fillSel(d.channels);
  chart(d.series);loadM(0)}
 function chart(s){const el=$('chart');if(s.length<1){el.innerHTML='<p class="mut">Grafik için en az bir tarama gerekli.</p>';return}
  const W=640,H=200,p=34,xs=s.map((_,i)=>s.length==1?W/2:p+i*(W-2*p)/(s.length-1)),mx=Math.max(...s.map(a=>a[1])),mn=Math.min(...s.map(a=>a[1])),r=(mx-mn)||1;
@@ -112,6 +128,17 @@ async function loadM(o){off=Math.max(0,o);const ch=$('fch').value,q=$('q').value
  $('pg').textContent=`${d.total?off+1:0}–${Math.min(off+50,d.total)} / ${n(d.total)}`;$('dlf').href='/download'+(ch?'?channel='+ch:'')}
 let want=false;
 async function quick(){if(!$('links').value.trim())return;want=true;$('qk').disabled=true;await api('/api/add',{links:$('links').value,quick:true});poll()}
+function fillSel(cs){const o=cs.map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('');
+ const a=$('annch'),r=$('rqch'),av=a.value,rv=r.value;a.innerHTML='<option value="">Tüm kanallar</option>'+o;r.innerHTML=o;a.value=av;if(rv)r.value=rv}
+async function announce(){const t=$('ann').value.trim();if(!t)return;const c=$('annch').value;
+ if(!confirm((c?'Seçili kanala':'Tüm kanallara')+' mesaj gönderilsin mi?'))return;
+ await api('/api/announce',{text:t,pin:$('pin').checked,channel_id:c?+c:null});poll()}
+async function rqLink(){const d=await api('/api/request_link',{channel_id:+$('rqch').value});$('rqout').innerHTML='Bağlantı: <b>'+esc(d.link)+'</b>'}
+async function rqPending(){const d=await api('/api/pending',{channel_id:+$('rqch').value});$('rqout').textContent=d.count+' bekleyen istek'}
+async function rqApprove(){const id=+$('rqch').value;const d=await api('/api/pending',{channel_id:id});
+ if(!d.count){$('rqout').textContent='Bekleyen istek yok';return}
+ if(!confirm(d.count+' isteğin hepsi onaylansın mı?'))return;const r=await api('/api/approve',{channel_id:id});$('rqout').textContent=r.approved+' istek onaylandı'}
+async function rqAuto(){await api('/api/auto',{channel_id:+$('rqch').value,on:$('auto').checked})}
 async function addCh(){await api('/api/add',{links:$('links').value});$('links').value='';poll()}
 async function scanAll(){await api('/api/scan',{});poll()}
 async function scanOne(id){await api('/api/scan',{channel_id:id});poll()}
