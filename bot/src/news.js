@@ -181,7 +181,7 @@ const uidOf = (item) =>
 async function fetchFeed(f) {
   try {
     const r = await fetch(f.url, {
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(Number(process.env.NEWS_TIMEOUT_MS || 25000)),
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; fade-bot/1.0)', Accept: 'application/rss+xml, application/xml, text/xml, */*' },
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
