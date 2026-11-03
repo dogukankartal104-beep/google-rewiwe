@@ -216,7 +216,10 @@ export async function collect({ hours = 6 } = {}) {
 
 /* Eşiği geçen, daha önce yayınlanmamış en iyi haberi bul. */
 export async function pickBreaking(minScore = ENV.newsMinScore) {
-  const items = await collect({ hours: 6 });
+  /* "BREAKING" must actually be breaking. A 5-hour-old story posted as
+     breaking news reads badly, so the window here is deliberately short —
+     older items still reach the evening digest. */
+  const items = await collect({ hours: Number(process.env.NEWS_BREAKING_HOURS || 3) });
   for (const it of items) {
     if (it.score < minScore) break;        // sıralı, gerisi daha düşük
     try { if (await db.newsSeen(it.uid)) continue; }
