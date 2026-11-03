@@ -1,0 +1,19 @@
+{
+  "name": "cryptopumpradar-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "FADE sistemi — Telegram sinyal & analiz botu (free + VIP)",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test",
+    "once": "node src/index.js --once",
+    "selftest": "node src/index.js --selftest"
+  },
+  "optionalDependencies": {
+    "ws": "8.18.0"
+  }
+}
