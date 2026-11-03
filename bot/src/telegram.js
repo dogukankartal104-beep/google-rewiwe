@@ -41,10 +41,22 @@ export async function call(method, payload = {}, { retries = 3 } = {}) {
   }
 }
 
-// Kanal gönderimleri sıraya alınır; art arda atarken Telegram'ı kızdırmayalım.
+/* Hedef bir kanal/grup mu, yoksa özel sohbet mi?
+   Kanal ve grup id'leri negatiftir veya @kullaniciadi biçimindedir;
+   özel sohbetin id'si pozitif bir sayıdır. */
+export function isChannel(chatId) {
+  const s = String(chatId);
+  return s.startsWith('@') || s.startsWith('-');
+}
+
+/* Kanal gönderimleri sıraya alınır; art arda atarken Telegram'ı kızdırmayalım.
+
+   DRY_RUN NOTU: DRY_RUN yalnızca KANAL yayınlarını durdurur. Özel sohbetteki
+   komut cevapları (/start, /id, /kanallar, /panel ...) her zaman gider —
+   yoksa kurulum yapılamaz, çünkü kanal id'lerini bota sorarak öğreniyorsun. */
 export async function send(chatId, text, opts = {}) {
   if (!chatId) throw new Error('chat id yok');
-  if (ENV.dryRun) {
+  if (ENV.dryRun && isChannel(chatId)) {
     log(`[DRY_RUN] -> ${chatId}\n${text}\n---`);
     return { message_id: 0, dry: true };
   }

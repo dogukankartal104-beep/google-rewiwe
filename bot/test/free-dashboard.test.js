@@ -287,3 +287,25 @@ test('dashHtml: XSS kaçışı yapan yardımcı var', () => {
   // tablo satırları esc() ile basılıyor mu
   assert.match(h, /esc\(sym\(s\.sembol\)\)/);
 });
+
+/* ======================= DRY_RUN KAPSAMI (regresyon) ======================= */
+import { isChannel } from '../src/telegram.js';
+
+test('isChannel: kanal/grup ile özel sohbeti ayırt eder', () => {
+  // kanal ve gruplar: @kullaniciadi veya negatif id
+  ['@cryptopumpradarr', '-1001234567890', -1001234567890, '-100123'].forEach((id) =>
+    assert.equal(isChannel(id), true, `kanal sayılmalı: ${id}`));
+  // özel sohbet: pozitif sayı
+  ['1173394657', 1173394657, 123].forEach((id) =>
+    assert.equal(isChannel(id), false, `özel sohbet sayılmalı: ${id}`));
+});
+
+test('DRY_RUN sadece kanalları kapsar — DM komut cevapları hep gider', () => {
+  /* Bu kritik: DRY_RUN tüm gönderimleri sustursaydı /start, /id ve /kanallar
+     cevapsız kalır, kullanıcı kanal id'lerini öğrenemez ve kurulum yapamazdı.
+     Canlıda tam olarak bu yaşandı; test geri gelmesini engelliyor. */
+  assert.equal(isChannel(ENV.freeChat || '@kanal'), true,
+    'free kanal hedefi kanal sayılmalı (DRY_RUN sustursun)');
+  assert.equal(isChannel(1173394657), false,
+    'kullanıcı DM hedefi kanal SAYILMAMALI (DRY_RUN susturmasın)');
+});
