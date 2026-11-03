@@ -51,8 +51,9 @@ svg text{fill:var(--mut);font-size:11px}
  <div class="card"><h2>Toplam üye (taramalara göre)</h2><div id="chart"></div></div>
  <div class="card"><h2>Kanal ekle</h2>
   <textarea id="links" placeholder="Her satıra bir davet bağlantısı&#10;https://t.me/+AbCdEf...&#10;https://t.me/kanaladim"></textarea>
-  <div class="row" style="margin-top:8px"><button onclick="addCh()">Kanalları ekle</button>
-  <span class="mut">Yalnızca yönetici olduğun kanallar eklenir.</span></div>
+  <div class="row" style="margin-top:8px"><button onclick="quick()" id="qk">Tara ve Excel indir</button>
+  <button class="sec" onclick="addCh()">Sadece ekle</button></div>
+  <p class="mut" style="margin:8px 0 0">Yalnızca yönetici olduğun kanallar çekilir.</p>
   <pre id="log" class="hide"></pre></div>
 </div>
 
@@ -109,11 +110,14 @@ async function loadM(o){off=Math.max(0,o);const ch=$('fch').value,q=$('q').value
  $('mrows').innerHTML=d.rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]?'@'+esc(r[1]):'<span class="mut">–</span>'}</td><td>${esc((r[2]+' '+r[3]).trim())}${r[4]?' 🤖':''}${r[5]?' <span class="mut">(silinmiş)</span>':''}</td><td>${esc(r[7])}</td><td class="mut">${r[6]||'–'}</td>
  <td><button class="sec s" onclick="navigator.clipboard.writeText('${r[0]}')">ID kopyala</button></td></tr>`).join('')||'<tr><td colspan=6 class="mut">Kayıt yok.</td></tr>';
  $('pg').textContent=`${d.total?off+1:0}–${Math.min(off+50,d.total)} / ${n(d.total)}`;$('dlf').href='/download'+(ch?'?channel='+ch:'')}
+let want=false;
+async function quick(){if(!$('links').value.trim())return;want=true;$('qk').disabled=true;await api('/api/add',{links:$('links').value,quick:true});poll()}
 async function addCh(){await api('/api/add',{links:$('links').value});$('links').value='';poll()}
 async function scanAll(){await api('/api/scan',{});poll()}
 async function scanOne(id){await api('/api/scan',{channel_id:id});poll()}
 async function del(id,t){if(confirm(t+' ve kayıtlı üyeleri silinsin mi?')){await api('/api/delete',{channel_id:id});load()}}
 async function poll(){$('log').classList.remove('hide');const s=await api('/api/status');$('log').textContent=s.log.join('\n');
- if(s.running)setTimeout(poll,1000);else load()}
+ if(s.running||(want&&!s.done)){setTimeout(poll,1000)}else{load();$('qk').disabled=false;
+  if(want){want=false;if(s.ids.length&&s.log.some(l=>l.includes('TAMAM'))){$('links').value='';location.href='/download?channel='+s.ids.join(',')}}}}
 refresh();
 </script></body></html>

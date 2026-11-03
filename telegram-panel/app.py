@@ -128,6 +128,7 @@ def now():
 
 async def add_channels(links):
     client = await get_client()
+    ids = []
     for link in links:
         try:
             ent = await resolve(client, link)
@@ -139,10 +140,12 @@ async def add_channels(links):
                 db.execute("INSERT INTO channels(tg_id,title,link) VALUES(?,?,?) "
                            "ON CONFLICT(tg_id) DO UPDATE SET title=excluded.title, link=excluded.link",
                            (ent.id, title, link))
+                ids.append(db.execute("SELECT id FROM channels WHERE tg_id=?", (ent.id,)).fetchone()[0])
                 db.commit()
             log(f"EKLENDI  {title}")
         except Exception as e:
             log(f"HATA     {link}: {e}")
+    return ids
 
 
 async def scan_channel(client, ch):
@@ -177,13 +180,18 @@ async def scan_channel(client, ch):
     log(f"TAMAM    {ch['title']}: {len(rows)} uye" + ("" if first else f", +{new_n} / -{left_n}") + note)
 
 
-async def scan(channel_id):
-    S.job.update(running=True, done=False, log=[])
+async def scan(channel_ids=None, keep_log=False):
+    S.job.update(running=True, done=False)
+    if not keep_log:
+        S.job["log"] = []
     try:
         client = await get_client()
         with dblock:
-            chans = [dict(r) for r in db.execute(
-                "SELECT * FROM channels" + (" WHERE id=?" if channel_id else ""), (channel_id,) if channel_id else ())]
+            if channel_ids:
+                q = ",".join("?" * len(channel_ids))
+                chans = [dict(r) for r in db.execute(f"SELECT * FROM channels WHERE id IN ({q})", channel_ids)]
+            else:
+                chans = [dict(r) for r in db.execute("SELECT * FROM channels")]
         for ch in chans:
             try:
                 await scan_channel(client, ch)
@@ -241,13 +249,16 @@ def members(channel, q, limit, offset):
     return {"total": total, "rows": [list(r) for r in rows]}
 
 
-def build_xlsx(channel=None):
+def build_xlsx(channels=None):
     wb = Workbook()
     wb.remove(wb.active)
     used = set()
     with dblock:
-        chans = db.execute("SELECT * FROM channels" + (" WHERE id=?" if channel else ""),
-                           (channel,) if channel else ()).fetchall()
+        if channels:
+            chans = db.execute(f"SELECT * FROM channels WHERE id IN ({','.join('?' * len(channels))})",
+                               channels).fetchall()
+        else:
+            chans = db.execute("SELECT * FROM channels").fetchall()
         for c in chans:
             name = re.sub(r"[\\/*?:\[\]]", "", c["title"])[:28].strip() or "kanal"
             base, n = name, 2
@@ -304,9 +315,9 @@ class H(BaseHTTPRequestHandler):
             self.j(members(int(qs["channel"]) if qs.get("channel") else None, qs.get("q", ""),
                            min(int(qs.get("limit", 50)), 500), int(qs.get("offset", 0))))
         elif u.path == "/api/status":
-            self.j({"running": S.job["running"], "done": S.job["done"], "log": S.job["log"]})
+            self.j({"running": S.job["running"], "done": S.job["done"], "log": S.job["log"], "ids": S.job.get("ids", [])})
         elif u.path == "/download":
-            data = build_xlsx(int(qs["channel"]) if qs.get("channel") else None)
+            data = build_xlsx([int(x) for x in qs["channel"].split(",") if x] if qs.get("channel") else None)
             name = f"telegram_uyeler_{datetime.now():%Y%m%d_%H%M}.xlsx"
             self.send(200, data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                       {"Content-Disposition": f'attachment; filename="{name}"'})
@@ -342,15 +353,23 @@ class H(BaseHTTPRequestHandler):
                     return self.j({"error": "Bir islem zaten calisiyor."}, 409)
                 if self.path == "/api/add":
                     links = [x for x in re.split(r"[\s,]+", d.get("links", "")) if x]
+                    quick = bool(d.get("quick"))
                     async def f():
-                        S.job.update(running=True, done=False, log=[])
+                        S.job.update(running=True, done=False, log=[], ids=[])
                         try:
-                            await add_channels(links)
-                        finally:
-                            S.job.update(running=False, done=True)
+                            ids = await add_channels(links)
+                            S.job["ids"] = ids
+                        except Exception as e:
+                            ids = []
+                            log(f"HATA     {e}")
+                        S.job["running"] = False
+                        if quick and ids:
+                            await scan(ids, keep_log=True)
+                        else:
+                            S.job["done"] = True
                     asyncio.run_coroutine_threadsafe(f(), loop)
                 else:
-                    asyncio.run_coroutine_threadsafe(scan(d.get("channel_id")), loop)
+                    asyncio.run_coroutine_threadsafe(scan([d["channel_id"]] if d.get("channel_id") else None), loop)
                 self.j({"ok": True})
             elif self.path == "/api/delete":
                 with dblock:
