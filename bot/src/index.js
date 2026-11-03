@@ -179,6 +179,8 @@ async function main() {
     err('Eksik zorunlu ayarlar: ' + miss.join(', '));
     err('Railway > Variables kısmından ekleyip yeniden deploy et.');
     if (!ENV.dryRun) process.exit(1);
+    warn('DRY_RUN açık olduğu için yine de başlatılıyor — ' +
+      'bot tarar ve kaydeder, ama hiçbir yere mesaj göndermez.');
   }
 
   // Veritabanı: tabloları bot kurar, elle SQL çalıştırmak gerekmez.
@@ -199,8 +201,14 @@ async function main() {
     return;
   }
 
-  // Telegram DM dinleyicisi (ayrı döngü)
-  pollLoop({ runScan }).catch((e) => err('poll döngüsü çöktü: ' + e.message));
+  // Telegram DM dinleyicisi (ayrı döngü) — token yoksa hiç başlatma,
+  // yoksa her 4 saniyede bir aynı hatayı loglar.
+  if (ENV.botToken) {
+    pollLoop({ runScan }).catch((e) => err('poll döngüsü çöktü: ' + e.message));
+  } else {
+    warn('TELEGRAM_BOT_TOKEN yok — DM dinleyicisi başlatılmadı. ' +
+      'Tarama ve kayıt çalışmaya devam ediyor.');
+  }
 
   // zamanlayıcı
   setInterval(() => { schedule().catch(() => {}); }, 60_000);
