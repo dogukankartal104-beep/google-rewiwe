@@ -56,6 +56,12 @@ export async function publishSignal(sig) {
    ÖNEMLİ: Vitrine çıkan pozisyonun sonucu, kaybetse bile free kanala
    gönderilir (publishResult bunu free_posted_at üzerinden yapar).
    Kazananı gösterip sonucu saklamak yapmadığımız bir şey. */
+/* DRY_RUN notu: kuru modda tg.send gercekte gondermez, {dry:true} doner.
+   Boyle bir gonderimi "yayinlandi" diye isaretlersek, canliya gecince o icerik
+   bir daha hic gonderilmez — kimsenin gormedigi icerik yanmis olur.
+   Bu yuzden kuru gonderimlerde tekillik kayitlari YAZILMAZ. */
+const kuru = (msg) => Boolean(msg && msg.dry);
+
 const fmtR = (v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}R`;
 
 const skipFree = (key, why) =>
@@ -134,12 +140,14 @@ export async function publishPendingFree() {
         : M.freeShowcase(s, score);
 
       const msg = await tg.send(ENV.freeChat, text, { reply_markup });
-      await db.patchSignal(s.key, {
-        free_msg_id: msg?.message_id ?? null,
-        free_posted_at: new Date().toISOString(),
-        free_kind: kind,
-        free_open_r: score,
-      });
+      if (!kuru(msg)) {
+        await db.patchSignal(s.key, {
+          free_msg_id: msg?.message_id ?? null,
+          free_posted_at: new Date().toISOString(),
+          free_kind: kind,
+          free_open_r: score,
+        });
+      }
       n++;
       log(`free'ye ${kind}: ${s.symbol} ${s.dir} (${fmtR(score)})`);
     } catch (e) {
@@ -224,7 +232,7 @@ export async function publishDaily() {
     try {
       const { text } = M.dailyVip(d);
       const msg = await tg.send(ENV.vipChat, text);
-      await db.postOnce('daily', 'vip', key, msg?.message_id ?? null);
+      if (!kuru(msg)) await db.postOnce('daily', 'vip', key, msg?.message_id ?? null);
       log('VIP günlük brifing yayınlandı');
     } catch (e) { warn('VIP gunluk:', e.message); }
   }
@@ -232,7 +240,7 @@ export async function publishDaily() {
     try {
       const { text, reply_markup } = M.dailyFree(d);
       const msg = await tg.send(ENV.freeChat, text, { reply_markup });
-      await db.postOnce('daily', 'free', key, msg?.message_id ?? null);
+      if (!kuru(msg)) await db.postOnce('daily', 'free', key, msg?.message_id ?? null);
       log('Free günlük analiz yayınlandı');
     } catch (e) { warn('free gunluk:', e.message); }
   }
@@ -250,7 +258,7 @@ export async function publishDailyRecap() {
     const open = (await db.openSignals()) || [];
     const { text, reply_markup } = M.dailyRecapFree(stats(rows), open.length);
     const msg = await tg.send(ENV.freeChat, text, { reply_markup });
-    await db.postOnce('recap', 'free', key, msg?.message_id ?? null);
+    if (!kuru(msg)) await db.postOnce('recap', 'free', key, msg?.message_id ?? null);
     log('Free gün kapanışı yayınlandı');
   } catch (e) { warn('gun kapanisi:', e.message); }
 }
@@ -303,7 +311,7 @@ async function publishTable({ kind, periodKey, st, title, periodLabel, members }
     try {
       const { text } = M.perfTable(st, { title, periodLabel, forFree: false });
       const msg = await tg.send(ENV.vipChat, text);
-      await db.postOnce(kind, 'vip', periodKey, msg?.message_id ?? null);
+      if (!kuru(msg)) await db.postOnce(kind, 'vip', periodKey, msg?.message_id ?? null);
       if (msg?.message_id) await tg.pin(ENV.vipChat, msg.message_id);
       log(`VIP ${kind} tablo yayınlandı (${periodKey})`);
     } catch (e) { warn(`VIP ${kind}:`, e.message); }
@@ -314,7 +322,7 @@ async function publishTable({ kind, periodKey, st, title, periodLabel, members }
         title, periodLabel, forFree: true, memberCount: members,
       });
       const msg = await tg.send(ENV.freeChat, text, { reply_markup });
-      await db.postOnce(kind, 'free', periodKey, msg?.message_id ?? null);
+      if (!kuru(msg)) await db.postOnce(kind, 'free', periodKey, msg?.message_id ?? null);
       if (msg?.message_id) await tg.pin(ENV.freeChat, msg.message_id);
       log(`Free ${kind} tablo yayınlandı (${periodKey})`);
     } catch (e) { warn(`free ${kind}:`, e.message); }
@@ -359,7 +367,7 @@ export async function publishEducation() {
         forFree, idx: idx + 1, total: LESSONS.length,
       });
       const msg = await tg.send(chatId, text, reply_markup ? { reply_markup } : {});
-      await db.eduAdd(lesson.id, channel, msg?.message_id ?? null);
+      if (!kuru(msg)) await db.eduAdd(lesson.id, channel, msg?.message_id ?? null);
       n++;
       log(`eğitim yayınlandı (${channel}): ${lesson.id} [${idx + 1}/${LESSONS.length}]`);
     } catch (e) {
@@ -425,6 +433,7 @@ export async function publishBreakingNews() {
     if (!chatId || !aktif) continue;
     try {
       const msg = await tg.send(chatId, text);
+      if (kuru(msg)) { n++; continue; }
       await db.newsAdd({
         uid: item.uid + (channel === 'free' ? '-f' : ''),
         title: item.title, url: item.url, source: item.source,
@@ -459,7 +468,7 @@ export async function publishNewsDigest() {
     if (await db.postExists('news', channel, key)) continue;
     try {
       const msg = await tg.send(chatId, text);
-      await db.postOnce('news', channel, key, msg?.message_id ?? null);
+      if (!kuru(msg)) await db.postOnce('news', channel, key, msg?.message_id ?? null);
       n++;
     } catch (e) { warn(`haber özeti (${channel}):`, e.message); }
   }
