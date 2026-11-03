@@ -54,7 +54,11 @@ async function handle(u, ctx) {
   const args = txt.split(/\s+/).slice(1);
 
   // ---- admin ----
-  if (tg.isAdmin(from.id)) {
+  // KURULUM MODU: ADMIN_IDS henüz boşsa /kanallar herkese açıktır, yoksa
+  // "admin olmak için ADMIN_IDS lazım, ADMIN_IDS için kanal ID lazım" kısır
+  // döngüsüne girilir. ADMIN_IDS girilince kilitlenir.
+  const kurulumModu = ENV.adminIds.length === 0;
+  if (tg.isAdmin(from.id) || (kurulumModu && cmd === '/kanallar')) {
     if (await adminCmd(cmd, args, from, ctx)) return;
   }
 
@@ -66,7 +70,12 @@ async function handle(u, ctx) {
         '',
         'Üstüne dokunarak kopyalayabilirsin.',
         'Railway → Variables → <code>ADMIN_IDS</code> alanına bunu yaz.',
-      ].join('\n'));
+        '',
+        ENV.adminIds.length
+          ? (tg.isAdmin(from.id) ? '✅ Zaten admin olarak tanımlısın.' : '')
+          : '⚠️ <code>ADMIN_IDS</code> şu an boş. Bunu girip kaydettikten sonra ' +
+            '/panel ile yönetim komutlarına erişebilirsin.',
+      ].filter(Boolean).join('\n'));
 
     case '/start':
       return tg.send(from.id, M.startMsg(from.first_name));
@@ -278,6 +287,11 @@ async function adminCmd(cmd, args, from, ctx) {
       await tg.send(from.id, [
         '<b>KEŞFEDİLEN KANALLAR</b>', '', satir.join('\n\n'), '',
         '<i>Ayarlı olmayanları Railway → Variables\'a yaz.</i>',
+        ...(ENV.adminIds.length ? [] : [
+          '',
+          '⚠️ <b>Kurulum modu:</b> <code>ADMIN_IDS</code> boş olduğu için bu komut',
+          'herkese açık. /id ile kendi numaranı alıp ADMIN_IDS\'e yazınca kilitlenir.',
+        ]),
       ].join('\n'));
       return true;
     }
@@ -445,11 +459,26 @@ async function onMyChatMember(ev) {
       : `Railway → Variables → <code>${oneri}</code> alanına yukarıdaki sayıyı yaz.`,
   ].join('\n');
 
+  let gonderildi = 0;
   for (const id of ENV.adminIds) {
-    try { await tg.send(id, mesaj); } catch { /* yoksay */ }
+    try { await tg.send(id, mesaj); gonderildi++; }
+    catch (e) {
+      // Telegram, kendisine hiç yazmamış bir kullanıcıya botun DM atmasına
+      // izin vermez. Sebebi net yazalım ki kullanıcı ne yapacağını bilsin.
+      const sebep = /chat not found|bot can't initiate|blocked/i.test(e.message)
+        ? `kullanıcı ${id} bota hiç /start yazmamış (veya botu engellemiş)`
+        : e.message;
+      warn(`kanal bilgisi DM gönderilemedi: ${sebep}`);
+    }
   }
-  // Admin tanımlı değilse en azından log'a tam olarak yaz
-  if (!ENV.adminIds.length) {
-    log(`>>> ${oneri} = ${chat.id}  (${chat.title || ''})`);
+  // DM gidemediyse (veya admin yoksa) bilgiyi log'a tam olarak yaz —
+  // kullanıcı Railway loglarından okuyabilsin.
+  if (!gonderildi) {
+    log(`>>> KURULUM: ${oneri} = ${chat.id}   («${chat.title || ''}»)`);
+    if (!ENV.adminIds.length) {
+      log('>>> ADMIN_IDS boş. Bota /id yazıp numaranı al, Railway\'e ekle.');
+    } else {
+      log('>>> Admin\'e DM gidemedi. Telegram\'da bota önce /start yaz, sonra /kanallar.');
+    }
   }
 }
