@@ -72,11 +72,17 @@ export const ENV = {
   tf: str('SCAN_TF', '15m'),
   scanMinChg: Number(str('SCAN_MIN_CHG', '8')),   // 24s min % hareket
   scanTop: Number(str('SCAN_TOP', '60')),         // her yönde kaç coin
-  scanIntervalSec: Number(str('SCAN_INTERVAL_SEC', '90')),
+  scanIntervalSec: Number(str('SCAN_INTERVAL_SEC', '120')),
   scanDir: str('SCAN_DIR', 'both'),               // both | S | L
   minGradeVip: str('MIN_GRADE_VIP', 'C'),         // VIP'e gidecek min sınıf
   minGradeFree: str('MIN_GRADE_FREE', 'B'),       // free'ye gidecek min sınıf
   freeDelayMin: Number(str('FREE_DELAY_MIN', '40')), // free gecikmesi (dk)
+
+  // --- free kanal vitrin kuralları ---
+  freePerDay: Number(str('FREE_SIGNALS_PER_DAY', '1')),   // günde max kaç sinyal free'ye
+  freeOnlyWinning: bool('FREE_ONLY_WINNING', true),       // sadece kazanan pozisyonu göster
+  freeMinOpenR: Number(str('FREE_MIN_OPEN_R', '0.5')),    // "kazanıyor" sayılmak için min R
+  freePendingMaxH: Number(str('FREE_PENDING_MAX_H', '14')), // bu kadar saat kazanmazsa vazgeç
   wsConfirm: bool('WS_CONFIRM', true),            // sinyal öncesi canlı tape teyidi
   wsConfirmSec: Number(str('WS_CONFIRM_SEC', '45')),
   sectorCheck: bool('SECTOR_CHECK', true),        // CoinGecko sektör kontrolü
@@ -88,6 +94,20 @@ export const ENV = {
   weeklyDay: Number(str('WEEKLY_DAY', '1')),      // 1=Pazartesi
   monthlyDay: Number(str('MONTHLY_DAY', '1')),
   dryRun: bool('DRY_RUN', false),                 // true: Telegram'a göndermez, loglar
+
+  // --- eğitim içeriği ---
+  eduOn: bool('EDU_ON', true),
+  eduHour: Number(str('EDU_HOUR', '13')),         // TR saati
+  eduEveryDays: Number(str('EDU_EVERY_DAYS', '1')), // kaç günde bir (1 = her gün)
+
+  // --- Railway tasarruf (eco) ---
+  ecoOn: bool('ECO_MODE', true),
+  ecoFactor: Number(str('ECO_FACTOR', '3')),      // ölü saatte tarama aralığı × bu
+  ecoFromHour: Number(str('ECO_FROM_HOUR', '0')), // TR 00:00
+  ecoToHour: Number(str('ECO_TO_HOUR', '4')),     // TR 04:00
+
+  // --- dashboard ---
+  dashKey: str('DASHBOARD_KEY'),                  // /dash?key=... ; boşsa dashboard kapalı
 
   // --- Supabase ---
   sbUrl: str('SUPABASE_URL'),

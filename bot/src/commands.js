@@ -5,9 +5,12 @@ import * as tg from './telegram.js';
 import * as M from './messages.js';
 import * as np from './payments.js';
 import * as vip from './vip.js';
-import { perfLastDays, publishDaily, publishWeekly, publishMonthly, publishDailyRecap } from './publisher.js';
+import {
+  perfLastDays, publishDaily, publishWeekly, publishMonthly,
+  publishDailyRecap, publishEducation,
+} from './publisher.js';
 import { MARKET } from './scanner.js';
-import { fmt, log, warn, trDateTime, dur } from './util.js';
+import { fmt, log, warn, trDateTime, dur, trDayStart } from './util.js';
 
 let OFFSET = 0;
 let loaded = false;
@@ -159,7 +162,10 @@ async function adminCmd(cmd, args, from, ctx) {
         '/uyeler — aktif VIP listesi',
         '/ver &lt;telegram_id&gt; &lt;plan&gt; — elle VIP ver',
         '/al &lt;telegram_id&gt; — VIP\'i bitir ve çıkar',
+        '/dash — dashboard linki',
+        '/tiklama — VIP link tıklama istatistiği',
         '/tara — şimdi bir tarama turu çalıştır',
+        '/egitim — eğitim postunu şimdi yayınla',
         '/gunluk — günlük analizi şimdi yayınla',
         '/kapanis — gün kapanışını şimdi yayınla',
         '/haftalik — haftalık tabloyu şimdi yayınla',
@@ -232,6 +238,55 @@ async function adminCmd(cmd, args, from, ctx) {
         await tg.send(from.id, `✅ ${r.scanned} aday · ${r.fired.length} sinyal · ${r.watch.length} izlemede · ${(r.ms / 1000).toFixed(0)}sn`);
       } catch (e) { await tg.send(from.id, '❌ ' + e.message); }
       return true;
+
+    case '/dash': {
+      if (!ENV.dashKey) {
+        await tg.send(from.id,
+          'Dashboard kapalı. Railway Variables\'a <code>DASHBOARD_KEY</code> ekle ' +
+          '(uzun, rastgele bir metin) ve yeniden deploy et.');
+        return true;
+      }
+      if (!ENV.publicUrl) {
+        await tg.send(from.id,
+          'Dashboard açık ama <code>PUBLIC_URL</code> ayarlı değil — linki üretemiyorum.');
+        return true;
+      }
+      const u = `${ENV.publicUrl}/dash?key=${encodeURIComponent(ENV.dashKey)}`;
+      await tg.send(from.id,
+        `📊 <b>Panel</b>\n\n<a href="${u}">${u}</a>\n\n` +
+        '<i>Bu link anahtarını içeriyor — kimseyle paylaşma.</i>');
+      return true;
+    }
+
+    case '/egitim':
+      await tg.send(from.id, 'Eğitim postu yayınlanıyor…');
+      try {
+        const n = await publishEducation();
+        await tg.send(from.id, n ? `✅ ${n} kanala yayınlandı` : 'ℹ️ Yayınlanacak yeni ders kalmamış');
+      } catch (e) { await tg.send(from.id, '❌ ' + e.message); }
+      return true;
+
+    case '/tiklama': {
+      try {
+        const since = new Date(Date.now() - 7 * 864e5).toISOString();
+        const cl = (await db.clicksSince(since)) || [];
+        const d0 = trDayStart();
+        const bugun = cl.filter((x) => Date.parse(x.created_at) >= d0).length;
+        const src = {};
+        cl.forEach((x) => { src[x.source || '?'] = (src[x.source || '?'] || 0) + 1; });
+        const lines = Object.entries(src).sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `<code>${k.padEnd(10)} ${v}</code>`);
+        await tg.send(from.id, [
+          '<b>VIP LİNK TIKLAMALARI</b>',
+          `Bugün: <b>${bugun}</b> · 7 gün: <b>${cl.length}</b>`,
+          '',
+          lines.length ? lines.join('\n') : 'henüz tıklama yok',
+          '',
+          '<i>Telegram gönderi görüntülenmesi vermiyor; tıklama dönüşüm için daha anlamlı.</i>',
+        ].join('\n'));
+      } catch (e) { await tg.send(from.id, '❌ ' + e.message); }
+      return true;
+    }
 
     case '/gunluk':
       await publishDaily(); await tg.send(from.id, '✅ günlük analiz denendi'); return true;

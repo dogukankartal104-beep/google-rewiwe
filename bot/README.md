@@ -45,17 +45,39 @@ Para kazandıran kısım bu ayrım. Free kanal **değeri gösterir, kullanılabi
 
 | | FREE | VIP |
 |---|---|---|
-| Sinyal | `FREE_DELAY_MIN` dk **gecikmeli**, coin + yön + sınıf + gerekçe | **Anında**, giriş/stop/TP1/TP2/R:R |
+| Sinyal | **günde 1 tane**, `FREE_DELAY_MIN` dk gecikmeli, **sadece kârdaysa** | **hepsi, anında**, giriş/stop/TP1/TP2/R:R |
 | Pozisyon boyutu | — | ✅ hesaba göre lot + $ risk |
 | Giriş/stop/hedef fiyatı | ❌ **asla** | ✅ |
-| Sonuç kartı | ✅ (VIP vurgusuyla) | ✅ |
+| Sonuç kartı | ✅ (vitrine çıkanın sonucu, kaybetse de) | ✅ hepsi |
 | Günlük analiz | rejim, genişlik, hareketliler, sistem durumu | + izleme listesi **seviyeleriyle**, açık pozisyonlar, filtre detayı |
 | Gün kapanışı | ✅ vitrin | — |
+| Eğitim içeriği | ✅ (sonunda VIP çağrısı) | ✅ (çağrısız) |
 | Haftalık/aylık tablo | ✅ | ✅ (daha detaylı) |
 
-Free'ye giden en düşük sınıf `MIN_GRADE_FREE` ile ayarlanır. Testler, free
-şablonlarının giriş/stop/TP fiyatlarını sızdırmadığını doğruluyor
-(`test/messages.test.js` → *"freeTeaser: plan fiyatlarını SIZDIRMAZ"*).
+### Free vitrin kuralları
+
+Free kanala giden sinyal **seçilir**, akmaz:
+
+1. Gecikme dolar (`FREE_DELAY_MIN`, vars. 40 dk)
+2. Sınıf eşiği geçer (`MIN_GRADE_FREE`, vars. B)
+3. **Pozisyon kârda olmalı** (`FREE_ONLY_WINNING`, min `FREE_MIN_OPEN_R` = +0.5R)
+4. Kârda değilse hemen vazgeçmez — `FREE_PENDING_MAX_H` saat boyunca bekler,
+   o sürede kâra geçerse yayınlar. Geçmezse sessizce atlar.
+5. Birden fazla aday varsa **en iyisi** seçilir
+6. Günde en fazla `FREE_SIGNALS_PER_DAY` (vars. 1)
+
+Mesaj şöyle gider: *"🔥 Şu an kazanan pozisyon — WIF SHORT, +1.35R önde.
+Bunu 1 sa 20 dk önce VIP'te girişiyle açtık. Yön doğru çıktı, ama nereden
+girip nerede çıkacağını bilmeden yön tek başına para kazandırmaz."*
+
+> **Dürüstlük notu — önemli.** Vitrine sadece kazananlar çıkar, ama vitrine
+> çıkan pozisyonun **sonucu kaybetse bile free kanala gönderilir**. Kazananı
+> gösterip sonucu saklamak yapmadığımız bir şey. Ayrıca haftalık/aylık
+> tablolar **tüm** işlemleri içerir — zarar edenler dahil. Vitrin bir seçki,
+> tablo ise tam kayıttır; kanalın güvenilirliği o tablodan gelir, kaldırma.
+
+Testler free şablonlarının giriş/stop/TP fiyatlarını sızdırmadığını ve kapı
+mantığının her dalını doğruluyor (`test/free-dashboard.test.js`).
 
 ---
 
@@ -89,6 +111,7 @@ Kendi id'ni de [@userinfobot](https://t.me/userinfobot) ile bul → `ADMIN_IDS`.
 ### 2) Supabase
 1. [supabase.com](https://supabase.com) → yeni proje (ücretsiz katman yeter).
 2. **SQL Editor** → `sql/schema.sql` dosyasının tamamını yapıştır → **Run**.
+   Sonra `sql/002_dashboard.sql` dosyasını da aynı şekilde çalıştır.
 3. **Project Settings → API**:
    - `Project URL` → `SUPABASE_URL`
    - `service_role` anahtarı → `SUPABASE_SERVICE_ROLE_KEY`
@@ -176,7 +199,10 @@ Her şey tamamsa `DRY_RUN=false` yap.
 | `/uyeler` | Aktif VIP listesi + kalan gün |
 | `/ver <id> <plan>` | Elle VIP ver (ödeme almadan / eksik ödemede) |
 | `/al <id>` | VIP'i bitir ve kanaldan çıkar |
+| `/dash` | Dashboard linkini DM'le gönderir |
+| `/tiklama` | VIP link tıklama istatistiği |
 | `/tara` | Şimdi bir tarama turu çalıştır |
+| `/egitim` | Eğitim postunu şimdi yayınla |
 | `/izleme` | Tetik bekleyen kurulumlar |
 | `/gunluk` `/kapanis` `/haftalik` `/aylik` | İlgili yayını şimdi tetikle |
 
@@ -192,6 +218,8 @@ Her şey tamamsa `DRY_RUN=false` yap.
 | Gün kapanışı | 23:00 (TR) | free |
 | Haftalık tablo | `WEEKLY_DAY`, `DAILY_HOUR`:10 | ikisi + sabitlenir |
 | Aylık tablo | ayın `MONTHLY_DAY`'i, `DAILY_HOUR`:20 | ikisi + sabitlenir |
+| Eğitim postu | `EDU_HOUR`:00 (vars. 13:00) | ikisi (free'de VIP çağrısı var) |
+| Abone fotoğrafı | 09:00 ve 21:00 | — (dashboard için) |
 | VIP süre/hatırlatma taraması | her saat başı | DM |
 
 Her yayın `posts` tablosundaki tekillik kısıtıyla korunur — Railway yeniden
@@ -261,6 +289,8 @@ bot/
 │   ├── tape.js         kısa süreli canlı tape teyidi (WebSocket)
 │   ├── sector.js       CoinGecko sektör davranışı (cache'li)
 │   ├── messages.js     tüm Telegram şablonları (free/VIP ayrımı burada)
+│   ├── lessons.js      25 derslik eğitim kütüphanesi
+│   ├── dashboard.js    panel: toplu veri + tek sayfa HTML
 │   ├── publisher.js    kanallara yayın + dönem anahtarları
 │   ├── commands.js     DM komutları + admin paneli
 │   ├── payments.js     NOWPayments fatura + IPN imza
@@ -268,8 +298,10 @@ bot/
 │   ├── server.js       IPN webhook + /health
 │   ├── db.js           Supabase (PostgREST) katmanı
 │   └── util.js         biçimleme, TR saat, seans, havuz
-├── sql/schema.sql      Supabase şeması
-├── test/               86 test (ağ gerektirmez)
+├── sql/
+│   ├── schema.sql      Supabase şeması
+│   └── 002_dashboard.sql  dashboard / eğitim / tıklama tabloları
+├── test/               114 test (ağ gerektirmez)
 ├── railway.json
 └── .env.example
 ```
@@ -286,3 +318,84 @@ tamamının kaybıyla sonuçlanabilir. Ücretli sinyal hizmeti sunmak bulunduğu
 ülkede lisans/kayıt gerektirebilir ve vergiye tabi olabilir — bunu kendin
 araştırmalısın. Tüm mesaj şablonlarında "yatırım tavsiyesi değildir" uyarısı
 otomatik eklenir; kaldırma.
+
+---
+
+## Dashboard
+
+Ayrı bir Railway servisi **yok** — panel botun kendi HTTP sunucusunda çalışır,
+ek maliyeti yoktur. Veri 60 saniye önbelleklenir, böylece sayfa yenilendikçe
+Supabase yorulmaz.
+
+**Açmak için:** `DASHBOARD_KEY` değişkenine uzun ve rastgele bir metin yaz.
+Sonra Telegram'da bota `/dash` yaz — linki sana gönderir.
+Doğrudan adres: `https://<domain>/dash?key=<DASHBOARD_KEY>`
+
+Panelde ne var:
+
+| Bölüm | İçerik |
+|---|---|
+| **Para** | Aktif VIP · bugün giren üye · bugünün ve 30 günün geliri · bekleyen ödeme · bota yazan kişi |
+| **Performans** | Bugünün ve 30 günün net R'si · isabet oranı · işlem başına R · kâr faktörü · max düşüş · açık pozisyon |
+| **Kanal & ilgi** | Free/VIP abone sayısı ve günlük değişim · VIP butonu tıklamaları · hangi mesaj türü en çok tıklanıyor |
+| **Günlük net R** | Son 30 günün gün gün çubuk grafiği + kümülatif |
+| **Son sinyaller** | Coin · sınıf · durum · R · free'ye gitti mi (gitmediyse neden) |
+| **Açık pozisyonlar** | Anlık R, kısmi çıkış yapıldı mı |
+| **Son ödemeler** | Plan · tutar · durum · hangi Telegram kullanıcısı |
+| **Sistem & dağılım** | BTC/rejim/DVOL/şok · sınıfa ve yöne göre performans kırılımı |
+
+### "Kaç kişi gördü?" sorusu
+
+Telegram **Bot API gönderi görüntülenme sayısı vermiyor** — bu bir eksiklik
+değil, API'de böyle bir alan yok (görüntülenme yalnızca Telegram uygulamasının
+arayüzünde ve MTProto kullanıcı API'sinde var, bot hesabında yok).
+
+Onun yerine daha anlamlı bir şey ölçülüyor: **VIP butonuna kaç kişi tıkladı.**
+Free kanaldaki butonlar `PUBLIC_URL/go/vip` üzerinden geçip davet linkine
+yönlendiriyor, her tıklama kaydediliyor. Dashboard bunu hem toplam hem de
+kaynağına göre (`showcase`, `recap`, `perf`, `daily`, `edu`) gösteriyor —
+yani **hangi içerik türü müşteri getiriyor** sorusunun cevabı.
+
+Görüntülenme bir gösterge, tıklama ise niyettir. Dönüşümü optimize etmek için
+ikincisi gerekir: "sonuç kartları %40 daha çok tıklanıyor" bilgisi, ham
+görüntülenme sayısından çok daha işe yarar.
+
+Ayrıca abone sayısı günde iki kez kaydedilir, böylece kanal büyümesi ve
+hangi içeriğin abone getirdiği zaman içinde görülebilir.
+
+---
+
+## Eğitim içeriği
+
+`src/lessons.js` içinde **25 ders** var: Open Interest, likidite süpürmesi,
+CVD, aVWAP, ATR, POC/Value Area, funding, likidasyon kaskadı, pozisyon boyutu,
+stop yerleştirme, R:R ve süre ilişkisi, komisyon/kayma, kaldıraç gerçeği,
+seans etkisi, günlük zarar limiti, performans tablosu okuma...
+
+Hepsi sistemin **gerçekten kullandığı** kavramları anlatır — dolgu içerik yok.
+Günde bir tane sırayla yayınlanır ve tekrar etmez (`edu_log` tekilliği).
+Free sürümünün sonunda VIP çağrısı var, VIP sürümünde yok.
+
+25 ders ≈ 25 gün. Bittiğinde bot log'a yazar; `lessons.js`'e yeni ders
+eklemen yeterli, id'leri değiştirme (değiştirirsen eskiler tekrar yayınlanır).
+
+---
+
+## Railway maliyeti
+
+Bot tek container'da çalışır: tarayıcı, Telegram dinleyicisi, IPN sunucusu ve
+dashboard hepsi aynı serviste. Ek servis yok.
+
+Maliyeti düşük tutan ayarlar:
+
+- `SCAN_INTERVAL_SEC=120` — tur arası 2 dakika (90'dan yükseltildi)
+- `ECO_MODE=true` — TR 00:00–04:00 arası tarama aralığı ×3 olur.
+  O saatlerde likidite ince, sistem zaten sinyal üretmiyor.
+- `SCAN_TOP=60` — her yönde incelenen coin sayısı. Düşürürsen CPU düşer.
+- `WS_CONFIRM` sadece ön elemeyi geçen birkaç aday için açılır, hepsi için değil
+- Dashboard verisi 60 sn önbellekli
+- Sektör sorgusu 6 saat önbellekli ve sadece sinyal adayları için
+
+Daha da kısmak istersen: `SCAN_INTERVAL_SEC=180`, `SCAN_TOP=40`,
+`WS_CONFIRM=false`, `SECTOR_CHECK=false`. Bunlar sinyal kalitesini bir miktar
+düşürür (teyit skoru azalır → sınıf düşebilir), tarama sıklığını azaltır.

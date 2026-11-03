@@ -6,6 +6,7 @@ import * as db from './db.js';
 import * as np from './payments.js';
 import * as vip from './vip.js';
 import * as tg from './telegram.js';
+import * as dash from './dashboard.js';
 import { log, warn, err } from './util.js';
 
 const MAX_BODY = 256 * 1024;
@@ -157,6 +158,45 @@ export function startServer() {
           const temporary = /doğrulanamadı|timeout|fetch|network|ECONN|5\d\d/i.test(e.message);
           return json(res, temporary ? 500 : 200, { ok: false, error: e.message });
         }
+      }
+
+      /* ---- takipli VIP linki ----
+         Free kanaldaki butonlar buraya gelir, tıklama kaydedilir ve
+         kullanıcı davet linkine yönlendirilir. Telegram gönderi
+         görüntülenmesi vermediği için dönüşümü böyle ölçüyoruz. */
+      if (path === '/go/vip') {
+        const source = (url.searchParams.get('s') || 'bilinmiyor').slice(0, 32);
+        const sigKey = (url.searchParams.get('k') || '').slice(0, 64) || null;
+        db.clickAdd({
+          kind: 'vip', source, signal_key: sigKey,
+          ua: String(req.headers['user-agent'] || '').slice(0, 200),
+        });
+        res.writeHead(302, { Location: ENV.vipInviteLink, 'Cache-Control': 'no-store' });
+        return res.end();
+      }
+
+      // ---- dashboard ----
+      if (path === '/dash') {
+        if (!ENV.dashKey) return html(res, 404, '<h3>Dashboard kapalı</h3><p>DASHBOARD_KEY ayarlanmamış.</p>');
+        if (!dash.keyOk(url.searchParams.get('key'))) {
+          return html(res, 403, '<h3>Erişim yok</h3><p>Geçersiz anahtar.</p>');
+        }
+        res.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Robots-Tag': 'noindex, nofollow',
+        });
+        return res.end(dash.dashHtml());
+      }
+
+      if (path === '/api/dash') {
+        if (!dash.keyOk(url.searchParams.get('key'))) return json(res, 403, { error: 'yetki yok' });
+        const data = await dash.aggregate();
+        res.writeHead(200, {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Cache-Control': 'no-store',
+        });
+        return res.end(JSON.stringify(data));
       }
 
       if (path === '/odeme-tamam') {

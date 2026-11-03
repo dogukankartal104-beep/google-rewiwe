@@ -44,54 +44,114 @@ export async function publishSignal(sig) {
   }
 }
 
-/* ---------------- 2) FREE TEASER (gecikmeli) ----------------
-   Her turda çağrılır; gecikme süresi dolmuş ve henüz paylaşılmamış
-   sinyalleri free kanala atar. */
+/* ---------------- 2) FREE VİTRİN ----------------
+   Kurallar:
+   • Günde en fazla ENV.freePerDay sinyal (varsayılan 1)
+   • SADECE kârda olan pozisyon gösterilir (ENV.freeOnlyWinning)
+   • Gecikme ENV.freeDelayMin dakika
+   • Kârda değilse hemen vazgeçmez — freePendingMaxH saat boyunca bekler,
+     o süre içinde kâra geçerse yayınlar. Geçmezse sessizce atlar.
+   • Birden fazla aday varsa EN İYİSİ seçilir (en yüksek R).
+
+   ÖNEMLİ: Vitrine çıkan pozisyonun sonucu, kaybetse bile free kanala
+   gönderilir (publishResult bunu free_posted_at üzerinden yapar).
+   Kazananı gösterip sonucu saklamak yapmadığımız bir şey. */
+const fmtR = (v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}R`;
+
+const skipFree = (key, why) =>
+  db.patchSignal(key, { free_skipped: true, free_skip_why: why }).catch(() => {});
+
+/* Bir adayın free kanala uygun olup olmadığını belirler. Saf fonksiyon —
+   testlerde doğrudan doğrulanır (ticari olarak en kritik karar burası).
+
+   döner: { action: 'post' | 'skip' | 'wait', kind, score, why } */
+export function classifyFreeCandidate(s, now = Date.now(), env = ENV) {
+  if (s.status === 'atlandı' || s.status === 'dolmadı') {
+    return { action: 'skip', why: s.status };
+  }
+  if (!gradeAtLeast(s.grade, env.minGradeFree)) {
+    return { action: 'skip', why: `sınıf ${s.grade} < ${env.minGradeFree}` };
+  }
+
+  const yas = now - Date.parse(s.created_at);
+  const zamanAsimi = yas > env.freePendingMaxH * 3600e3;
+
+  if (s.closed_at) {
+    // Gecikme dolmadan kapandı: "şu an kazanıyor" demek yanlış olur,
+    // doğrudan sonuç kartı — ama sadece kazandıysa.
+    const net = s.r_net ?? s.r ?? 0;
+    if (env.freeOnlyWinning && net <= 0) {
+      return { action: 'skip', why: `kapandı ${fmtR(net)}` };
+    }
+    return { action: 'post', kind: 'result', score: net };
+  }
+
+  const openR = s.open_r ?? 0;
+  if (env.freeOnlyWinning && openR < env.freeMinOpenR) {
+    return zamanAsimi
+      ? { action: 'skip', why: `${env.freePendingMaxH} saatte kâra geçmedi` }
+      : { action: 'wait', why: `${fmtR(openR)} < +${env.freeMinOpenR}R` };
+  }
+  return { action: 'post', kind: 'showcase', score: openR };
+}
+
 export async function publishPendingFree() {
   if (!ENV.postFree || !ENV.freeChat) return 0;
+
+  // --- günlük kota ---
+  const dayFrom = new Date(trDayStart()).toISOString();
+  const dayTo = new Date(trDayStart() + 864e5).toISOString();
+  let used = 0;
+  try { used = ((await db.freePostedBetween(dayFrom, dayTo)) || []).length; }
+  catch (e) { warn('free kota okunamadı:', e.message); return 0; }
+  const slots = ENV.freePerDay - used;
+  if (slots <= 0) return 0;
+
+  // --- adaylar ---
   const cutoff = new Date(Date.now() - ENV.freeDelayMin * 6e4).toISOString();
   let rows;
-  try { rows = await db.freePending(cutoff); }
-  catch (e) { warn('free bekleyenler:', e.message); return 0; }
+  try { rows = await db.freeCandidates(cutoff); }
+  catch (e) { warn('free adayları:', e.message); return 0; }
   if (!rows?.length) return 0;
 
-  let n = 0;
+  const ready = [];
   for (const s of rows) {
-    // atlanan/dolmayan sinyalleri free'ye atmıyoruz
-    if (s.status === 'atlandı' || s.status === 'dolmadı') {
-      await db.patchSignal(s.key, { free_posted_at: new Date().toISOString() }).catch(() => {});
-      continue;
-    }
-    if (!gradeAtLeast(s.grade, ENV.minGradeFree)) {
-      await db.patchSignal(s.key, { free_posted_at: new Date().toISOString() }).catch(() => {});
-      continue;
-    }
+    const v = classifyFreeCandidate(s);
+    if (v.action === 'skip') { await skipFree(s.key, v.why); continue; }
+    if (v.action === 'wait') continue;              // sonraki turda tekrar bakılır
+    ready.push({ s, kind: v.kind, score: v.score });
+  }
+  if (!ready.length) return 0;
+
+  // en iyi performans gösteren adayı seç
+  ready.sort((a, b) => b.score - a.score);
+
+  let n = 0;
+  for (const { s, kind, score } of ready.slice(0, slots)) {
     try {
-      /* Sinyal gecikme süresi dolmadan kapanmış olabilir (örn. 10 dakikada stop).
-         O durumda "şu an +XR önde" diyen teaser yanlış bilgi olur —
-         doğrudan sonuç kartını yayınlıyoruz. */
-      const kapandi = Boolean(s.closed_at);
-      const { text, reply_markup } = kapandi
+      const { text, reply_markup } = kind === 'result'
         ? M.resultCard(s, { forFree: true })
-        : M.freeTeaser(s, { openR: s.open_r });
+        : M.freeShowcase(s, score);
 
       const msg = await tg.send(ENV.freeChat, text, { reply_markup });
       await db.patchSignal(s.key, {
         free_msg_id: msg?.message_id ?? null,
         free_posted_at: new Date().toISOString(),
+        free_kind: kind,
+        free_open_r: score,
       });
       n++;
-      log(`free'ye ${kapandi ? 'sonuç kartı' : 'teaser'}: ${s.symbol} ${s.dir}`);
+      log(`free'ye ${kind}: ${s.symbol} ${s.dir} (${fmtR(score)})`);
     } catch (e) {
-      warn(`free teaser (${s.symbol}): ${e.message}`);
-      // kalıcı hata ise tekrar denemeyi bırak
+      warn(`free vitrin (${s.symbol}): ${e.message}`);
       if (/chat not found|not enough rights|blocked/i.test(e.message)) {
-        await db.patchSignal(s.key, { free_posted_at: new Date().toISOString() }).catch(() => {});
+        await skipFree(s.key, 'kanal hatası');
       }
     }
   }
   return n;
 }
+
 
 /* ---------------- 3) SONUÇ KARTI ---------------- */
 export async function publishResult(sig) {
@@ -264,4 +324,65 @@ async function publishTable({ kind, periodKey, st, title, periodLabel, members }
 // /performans komutu için — son N gün
 export async function perfLastDays(days = 30) {
   return perfFor(Date.now() - days * 864e5, Date.now() + 6e4);
+}
+
+/* ---------------- 7) EĞİTİM İÇERİĞİ ----------------
+   Sırayla yayınlanır, tekrar etmez. Kütüphane bitince baştan başlar
+   (edu_log tekilliği yüzünden aynı ders aynı kanala iki kez gitmez;
+   döngü sıfırlanırsa yeni ders eklenmesi beklenir). */
+export async function publishEducation() {
+  if (!ENV.eduOn) return 0;
+  const { LESSONS } = await import('./lessons.js');
+  let n = 0;
+
+  for (const [channel, chatId, forFree] of [
+    ['free', ENV.freeChat, true],
+    ['vip', ENV.vipChat, false],
+  ]) {
+    if (!chatId) continue;
+    if (channel === 'free' && !ENV.postFree) continue;
+    if (channel === 'vip' && !ENV.postVip) continue;
+
+    try {
+      const done = (await db.eduPosted(channel)) || [];
+      const doneIds = new Set(done.map((x) => x.lesson_id));
+
+      // sıradaki yayınlanmamış ders
+      const idx = LESSONS.findIndex((l) => !doneIds.has(l.id));
+      if (idx === -1) {
+        log(`eğitim: ${channel} için tüm dersler yayınlanmış (${LESSONS.length})`);
+        continue;
+      }
+      const lesson = LESSONS[idx];
+
+      const { text, reply_markup } = M.eduPost(lesson, {
+        forFree, idx: idx + 1, total: LESSONS.length,
+      });
+      const msg = await tg.send(chatId, text, reply_markup ? { reply_markup } : {});
+      await db.eduAdd(lesson.id, channel, msg?.message_id ?? null);
+      n++;
+      log(`eğitim yayınlandı (${channel}): ${lesson.id} [${idx + 1}/${LESSONS.length}]`);
+    } catch (e) {
+      if (/duplicate|unique/i.test(e.message)) continue; // yarış durumu, sorun değil
+      warn(`eğitim (${channel}):`, e.message);
+    }
+  }
+  return n;
+}
+
+/* ---------------- 8) KANAL İSTATİSTİĞİ ----------------
+   Telegram Bot API gönderi görüntülenmesini VERMEZ. Abone sayısını
+   günlük kaydediyoruz; dashboard büyümeyi buradan gösteriyor. */
+export async function snapshotChannels() {
+  const day = dayKey();
+  for (const [channel, chatId] of [['free', ENV.freeChat], ['vip', ENV.vipChat]]) {
+    if (!chatId) continue;
+    try {
+      const members = await tg.memberCount(chatId);
+      if (members == null) continue;
+      await db.statsSnapshot(day, channel, members);
+    } catch (e) {
+      warn(`abone sayısı (${channel}):`, e.message);
+    }
+  }
 }

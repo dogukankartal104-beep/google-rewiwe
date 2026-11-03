@@ -141,3 +141,67 @@ export async function ping() {
   await select('bot_state', 'select=key&limit=1');
   return true;
 }
+
+/* ============================================================
+   002: dashboard / eğitim / tıklama
+   ============================================================ */
+
+// ---------------- kanal istatistiği ----------------
+export const statsSnapshot = (day, channel, members) =>
+  insert('channel_stats', { day, channel, members },
+    { upsert: true, onConflict: 'day,channel' });
+
+export const statsHistory = (days = 30) =>
+  select('channel_stats',
+    `order=day.desc&limit=${days * 2}`);
+
+// ---------------- tıklama ----------------
+export const clickAdd = (row) => insert('click_events', row).catch(() => null);
+
+export const clicksSince = (iso) =>
+  select('click_events',
+    `created_at=gte.${encodeURIComponent(iso)}&select=id,kind,source,signal_key,created_at` +
+    `&order=created_at.desc&limit=2000`);
+
+// ---------------- eğitim ----------------
+export const eduPosted = (channel) =>
+  select('edu_log', `channel=eq.${channel}&select=lesson_id,posted_at&order=posted_at.desc&limit=500`);
+
+export const eduAdd = (lessonId, channel, messageId) =>
+  insert('edu_log', { lesson_id: lessonId, channel, message_id: messageId });
+
+export const eduLast = (channel) =>
+  select('edu_log', `channel=eq.${channel}&order=posted_at.desc&limit=1`)
+    .then((r) => r?.[0] || null);
+
+// ---------------- free vitrin kotası ----------------
+// Bir TR gününde free kanala kaç sinyal gönderildi
+export const freePostedBetween = (fromIso, toIso) =>
+  select('signals',
+    `free_posted_at=gte.${encodeURIComponent(fromIso)}` +
+    `&free_posted_at=lt.${encodeURIComponent(toIso)}` +
+    `&free_skipped=is.false&select=key,symbol,free_posted_at,free_kind&limit=100`);
+
+// Free'ye gönderilmeyi bekleyen adaylar (atlanmış olanlar hariç)
+export const freeCandidates = (beforeIso) =>
+  select('signals',
+    `free_posted_at=is.null&free_skipped=is.false` +
+    `&created_at=lte.${encodeURIComponent(beforeIso)}` +
+    `&order=created_at.asc&limit=40`);
+
+export const payRecent = (limit = 20) =>
+  select('payments', `order=created_at.desc&limit=${limit}`);
+
+export const paySince = (iso) =>
+  select('payments',
+    `created_at=gte.${encodeURIComponent(iso)}&order=created_at.desc&limit=500`);
+
+export const vipJoinedSince = (iso) =>
+  select('vip_members',
+    `last_payment_at=gte.${encodeURIComponent(iso)}&order=last_payment_at.desc&limit=200`);
+
+export const signalsRecent = (limit = 25) =>
+  select('signals', `order=created_at.desc&limit=${limit}`);
+
+export const usersCount = () =>
+  select('bot_users', 'select=telegram_id&limit=10000').then((r) => (r || []).length);

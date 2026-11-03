@@ -8,8 +8,19 @@ const ok = (b) => (b ? '✅' : '◻️');
 const dirIcon = (d) => (d === 'L' ? '🟢 LONG' : '🔴 SHORT');
 const dirArrow = (d) => (d === 'L' ? '▲' : '▼');
 
-const vipBtn = () => ({
-  inline_keyboard: [[{ text: '⭐ VIP\'e katıl', url: ENV.vipInviteLink }]],
+/* VIP butonu. PUBLIC_URL varsa link bot üzerinden yönlendirilir, böylece
+   "kaç kişi gerçekten ilgilendi" ölçülebilir (Telegram Bot API gönderi
+   görüntülenmesini vermiyor, tıklama ondan daha değerli bir metrik). */
+export function vipUrl(source = 'free', signalKey = null) {
+  if (!ENV.publicUrl) return ENV.vipInviteLink;
+  const u = new URL(ENV.publicUrl + '/go/vip');
+  u.searchParams.set('s', source);
+  if (signalKey) u.searchParams.set('k', signalKey);
+  return u.toString();
+}
+
+const vipBtn = (source = 'free', signalKey = null, text = '⭐ VIP\'e katıl') => ({
+  inline_keyboard: [[{ text, url: vipUrl(source, signalKey) }]],
 });
 
 // Giriş fiyatına göre yüzde
@@ -80,7 +91,41 @@ export function freeTeaser(s, { openR = null } = {}) {
   lines.push(`Sinyal anında almak için ⤵️`);
   lines.push('');
   lines.push(`<i>${UYARI}</i>`);
-  return { text: lines.join('\n'), reply_markup: vipBtn() };
+  return { text: lines.join('\n'), reply_markup: vipBtn('teaser', s.key) };
+}
+
+/* ============================================================
+   FREE VİTRİN — "bakın bu pozisyon kazanıyor"
+   Günde en fazla 1 tane, SADECE kârda olan pozisyon için.
+   Fiyat vermez; coin + yön + o anki R + VIP çağrısı.
+   ============================================================ */
+export function freeShowcase(s, openR) {
+  const geciken = dur(Date.now() - Date.parse(s.created_at));
+  const L = s.dir === 'L';
+  const lines = [];
+
+  lines.push(`🔥 <b>ŞU AN KAZANAN POZİSYON</b>`);
+  lines.push('');
+  lines.push(`${dirIcon(s.dir)}  <b>${sym(s.symbol)}</b>`);
+  lines.push(`Durum: <b>+${fmt(openR, 2)}R önde</b> 🟢`);
+  lines.push('');
+  lines.push(`Bu pozisyonu <b>${geciken} önce</b> VIP kanalda açtık —`);
+  lines.push(`giriş, stop ve hedefleriyle birlikte.`);
+  lines.push('');
+  lines.push('<b>Sistem neye baktı?</b>');
+  lines.push(`• Tip: ${String(s.type || '').toLowerCase()}`);
+  lines.push(`• Tükenme onayı: <b>${s.ex_n}/5</b>`);
+  lines.push(`• Tetik: ${s.trg || '—'}`);
+  if (s.why) lines.push(`• Veri: ${s.why}`);
+  lines.push('');
+  lines.push(`Yön doğru çıktı. Ama <b>nereden girip nerede çıkacağını</b>`);
+  lines.push(`bilmeden yön tek başına para kazandırmaz.`);
+  lines.push('');
+  lines.push(`VIP\'te sinyal <b>anında</b> gelir: giriş · stop · TP1 · TP2 · pozisyon boyutu ⤵️`);
+  lines.push('');
+  lines.push(`<i>${UYARI}</i>`);
+
+  return { text: lines.join('\n'), reply_markup: vipBtn('showcase', s.key) };
 }
 
 /* ============================================================
@@ -108,7 +153,7 @@ export function resultCard(s, { forFree = false } = {}) {
     lines.push(kazanc
       ? 'VIP üyeler bu hareketi baştan yakaladı.'
       : 'Stop planda yazıyordu — VIP üyeler riski önceden biliyordu. Sistem zararı da yönetir.');
-    return { text: lines.join('\n') + `\n\n<i>${UYARI}</i>`, reply_markup: vipBtn() };
+    return { text: lines.join('\n') + `\n\n<i>${UYARI}</i>`, reply_markup: vipBtn('result', s.key) };
   }
   return { text: lines.join('\n') + `\n\n<i>${UYARI}</i>` };
 }
@@ -150,7 +195,7 @@ export function dailyFree(d) {
   lines.push('Giriş-stop-hedefli canlı sinyaller VIP kanalda ⤵️');
   lines.push('');
   lines.push(`<i>${UYARI}</i>`);
-  return { text: lines.join('\n'), reply_markup: vipBtn() };
+  return { text: lines.join('\n'), reply_markup: vipBtn('daily') };
 }
 
 export function dailyVip(d) {
@@ -214,7 +259,7 @@ export function perfTable(st, { title, periodLabel, forFree = false, memberCount
     lines.push('zorlamamak da bir karardır.');
     lines.push('');
     lines.push(`<i>${UYARI}</i>`);
-    return { text: lines.join('\n'), reply_markup: forFree ? vipBtn() : undefined };
+    return { text: lines.join('\n'), reply_markup: forFree ? vipBtn('perf') : undefined };
   }
 
   const usd = st.usd;
@@ -268,7 +313,7 @@ export function perfTable(st, { title, periodLabel, forFree = false, memberCount
     if (memberCount) lines.push(`${memberCount} üye aynı anda gördü.`);
     lines.push('');
     lines.push(`<i>${UYARI}</i>`);
-    return { text: lines.join('\n'), reply_markup: vipBtn() };
+    return { text: lines.join('\n'), reply_markup: vipBtn('perf') };
   }
   lines.push('');
   lines.push(`<i>${UYARI}</i>`);
@@ -296,7 +341,7 @@ export function dailyRecapFree(st, openN) {
   lines.push('Free kanalda sonucu görüyorsun — VIP\'te işlemi görüyorsun.');
   lines.push('');
   lines.push(`<i>${UYARI}</i>`);
-  return { text: lines.join('\n'), reply_markup: vipBtn() };
+  return { text: lines.join('\n'), reply_markup: vipBtn('recap') };
 }
 
 /* ============================================================
@@ -461,4 +506,25 @@ export function nasilMsg() {
     '',
     `<i>${UYARI}</i>`,
   ].join('\n');
+}
+
+/* ============================================================
+   EĞİTİM POSTU
+   Free'de sonunda VIP çağrısı var, VIP'te yok (üye zaten içeride).
+   ============================================================ */
+export function eduPost(lesson, { forFree = false, idx = null, total = null } = {}) {
+  const lines = [];
+  lines.push(`📚 <b>${lesson.title}</b>`);
+  lines.push(`<i>${lesson.tag}${idx && total ? ` · ders ${idx}/${total}` : ''}</i>`);
+  lines.push('');
+  lines.push(lesson.body);
+
+  if (forFree) {
+    lines.push('');
+    lines.push('—');
+    lines.push('Bu kontrolleri <b>elle takip etmek</b> 400 coinde mümkün değil.');
+    lines.push('Sistem bunu 7/24 tarayıp sadece üçü hizalandığında haber veriyor ⤵️');
+    return { text: lines.join('\n'), reply_markup: vipBtn('edu') };
+  }
+  return { text: lines.join('\n') };
 }

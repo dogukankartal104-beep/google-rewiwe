@@ -8,7 +8,8 @@ import { warmup, scanOnce, MARKET } from './scanner.js';
 import { resolveOpen } from './tracker.js';
 import {
   publishSignal, publishResult, publishPendingFree,
-  publishDaily, publishDailyRecap, publishWeekly, publishMonthly, dayKey,
+  publishDaily, publishDailyRecap, publishWeekly, publishMonthly,
+  publishEducation, snapshotChannels, dayKey,
 } from './publisher.js';
 import { pollLoop } from './commands.js';
 import { startServer } from './server.js';
@@ -68,6 +69,15 @@ async function schedule() {
     // aylık tablo — ayın 1'i, günlük analizden 20 dk sonra
     if (dom === ENV.monthlyDay && h === ENV.dailyHour && mi >= 20 && mi < 25) await publishMonthly();
 
+    // eğitim postu — günlük analizden ayrı saatte, spam olmasın
+    if (ENV.eduOn && h === ENV.eduHour && mi < 5) {
+      const gun = Math.floor(Date.now() / 864e5);
+      if (ENV.eduEveryDays <= 1 || gun % ENV.eduEveryDays === 0) await publishEducation();
+    }
+
+    // abone sayısı fotoğrafı — günde iki kez yeter (dashboard büyüme grafiği)
+    if ((h === 9 || h === 21) && mi < 5) await snapshotChannels();
+
     // VIP süre/hatırlatma taraması — saat başı
     if (mi < 5) {
       const r = await vip.sweep();
@@ -76,6 +86,19 @@ async function schedule() {
   } catch (e) {
     warn('zamanlayıcı:', e.message);
   }
+}
+
+/* Railway tasarrufu: ölü saatlerde (TR 00:00–04:00) likidite ince ve
+   sistem zaten sinyal üretmiyor — tarama aralığını uzatıyoruz.
+   Aynı container, daha az CPU. */
+function scanWaitMs() {
+  const base = ENV.scanIntervalSec * 1000;
+  if (!ENV.ecoOn) return base;
+  const h = trDate().getUTCHours();
+  const olu = ENV.ecoFromHour <= ENV.ecoToHour
+    ? h >= ENV.ecoFromHour && h < ENV.ecoToHour
+    : h >= ENV.ecoFromHour || h < ENV.ecoToHour;   // gece yarısını geçen aralık
+  return olu ? base * Math.max(1, ENV.ecoFactor) : base;
 }
 
 async function selftest() {
@@ -116,7 +139,9 @@ async function main() {
   log('FADE bot başlıyor…');
   log(`TF ${ENV.tf} · min %${ENV.scanMinChg} · top ${ENV.scanTop} · her ${ENV.scanIntervalSec}sn`);
   log(`risk %${CFG.riskPct} · max ${CFG.maxOpen} pozisyon · gün limiti ${CFG.dailyStopR}R`);
-  log(`free gecikme ${ENV.freeDelayMin}dk · VIP min sınıf ${ENV.minGradeVip} · free min sınıf ${ENV.minGradeFree}`);
+  log(`free: gecikme ${ENV.freeDelayMin}dk · günde ${ENV.freePerDay} sinyal · ${ENV.freeOnlyWinning ? `sadece kazanan (min +${ENV.freeMinOpenR}R)` : 'hepsi'} · min sınıf ${ENV.minGradeFree}`);
+  log(`VIP min sınıf ${ENV.minGradeVip} · eğitim ${ENV.eduOn ? `açık (saat ${ENV.eduHour})` : 'kapalı'} · eco ${ENV.ecoOn ? `açık (×${ENV.ecoFactor})` : 'kapalı'}`);
+  log(`dashboard: ${ENV.dashKey ? (ENV.publicUrl ? ENV.publicUrl + '/dash?key=***' : 'PUBLIC_URL yok') : 'kapalı (DASHBOARD_KEY yok)'}`);
   if (ENV.dryRun) log('⚠️ DRY_RUN açık — Telegram\'a hiçbir şey gönderilmeyecek');
 
   if (ARG.has('--selftest')) { await selftest(); return; }
@@ -152,7 +177,7 @@ async function main() {
     const t0 = Date.now();
     try { await tick(); }
     catch (e) { err('tick:', e.message); }
-    const wait = Math.max(5_000, ENV.scanIntervalSec * 1000 - (Date.now() - t0));
+    const wait = Math.max(5_000, scanWaitMs() - (Date.now() - t0));
     await sleep(wait);
   }
 }
