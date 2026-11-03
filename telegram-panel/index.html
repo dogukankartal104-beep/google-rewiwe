@@ -1,55 +1,119 @@
 <!doctype html>
 <html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kanal Üye Aktarıcı</title>
+<title>Kanal Dashboard</title>
 <style>
-:root{--bg:#f6f7f9;--card:#fff;--tx:#1b1f24;--mut:#667085;--ac:#2563eb;--bd:#e4e7ec}
-@media(prefers-color-scheme:dark){:root{--bg:#0f1318;--card:#171c23;--tx:#e8ecf1;--mut:#8b95a5;--ac:#5b8def;--bd:#262d38}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.5 system-ui,sans-serif}
-main{max-width:720px;margin:0 auto;padding:24px 16px}h1{font-size:22px;margin:0 0 4px}
-.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:18px;margin:16px 0}
-h2{font-size:16px;margin:0 0 10px}p{color:var(--mut);margin:4px 0 10px}
-input,textarea{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit;margin:4px 0 8px}
-textarea{min-height:140px;font-family:ui-monospace,monospace;font-size:13px}
-button,a.btn{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:inherit;cursor:pointer;text-decoration:none;display:inline-block}
-button.sec{background:transparent;color:var(--mut);border:1px solid var(--bd)}
-pre{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px;white-space:pre-wrap;font-size:13px;max-height:280px;overflow:auto;margin:10px 0 0}
-.err{color:#d92d20}.hide{display:none}
-</style></head><body><main>
-<h1>Kanal Üye Aktarıcı</h1>
-<p>Yalnızca yönetici olduğun kanallar. Telefon numarası alınmaz.</p>
-<div id="msg" class="err"></div>
+:root{--bg:#f4f6f9;--card:#fff;--tx:#18202b;--mut:#64707f;--ac:#2563eb;--bd:#e3e8ef;--ok:#16a34a;--bad:#dc2626;--hov:#f1f5fb}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1217;--card:#161b22;--tx:#e6ebf2;--mut:#8a95a6;--ac:#5b8def;--bd:#252c36;--ok:#4ade80;--bad:#f87171;--hov:#1b222c}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 system-ui,sans-serif}
+header{display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+header h1{font-size:17px;margin:0;flex:1}header small{color:var(--mut)}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.tile,.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px}
+.tile b{display:block;font-size:26px;font-variant-numeric:tabular-nums}.tile span{color:var(--mut);font-size:12px}
+.grid{display:grid;grid-template-columns:1.6fr 1fr;gap:12px;margin-top:12px}@media(max-width:860px){.grid{grid-template-columns:1fr}}
+h2{font-size:14px;margin:0 0 10px}.card{margin-top:12px}.grid .card{margin-top:0}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--bd);white-space:nowrap}
+th{color:var(--mut);font-weight:600;font-size:12px}tr:hover td{background:var(--hov)}
+.tw{overflow-x:auto}.num{font-variant-numeric:tabular-nums;text-align:right}
+.up{color:var(--ok)}.dn{color:var(--bad)}.mut{color:var(--mut)}
+button,a.btn{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:8px 13px;font:inherit;cursor:pointer;text-decoration:none;display:inline-block}
+button.sec,a.sec{background:transparent;color:var(--tx);border:1px solid var(--bd)}button:disabled{opacity:.5}
+button.s,a.s{padding:4px 9px;font-size:12px}
+input,textarea,select{padding:9px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);font:inherit}
+textarea{width:100%;min-height:90px;font-family:ui-monospace,monospace;font-size:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row input{flex:1;min-width:140px}
+pre{background:var(--bg);border:1px solid var(--bd);border-radius:8px;padding:10px;white-space:pre-wrap;font-size:12px;max-height:200px;overflow:auto;margin:10px 0 0}
+#msg{color:var(--bad);margin:8px 0}.hide{display:none!important}
+.login{max-width:460px;margin:40px auto}.login .card p{color:var(--mut)}.login input{width:100%;margin:4px 0}
+svg text{fill:var(--mut);font-size:11px}
+</style></head><body>
+<header><h1>Kanal Dashboard</h1><small id="me"></small>
+<button class="sec s hide" id="logout" onclick="logout()">Çıkış</button></header>
+<main>
+<div id="msg"></div>
 
-<div class="card hide" id="s-config"><h2>1. API bilgileri</h2>
-<p><b>my.telegram.org</b> → API development tools adresinden ücretsiz alırsın.</p>
+<div class="login hide" id="s-config"><div class="card"><h2>1. API bilgileri</h2>
+<p>my.telegram.org → API development tools adresinden ücretsiz alırsın.</p>
 <input id="api_id" placeholder="API ID"><input id="api_hash" placeholder="API Hash">
-<button onclick="saveCfg()">Kaydet</button></div>
+<button onclick="saveCfg()">Kaydet</button></div></div>
 
-<div class="card hide" id="s-login"><h2>2. Telegram girişi</h2>
+<div class="login hide" id="s-login"><div class="card"><h2>2. Telegram girişi</h2>
 <p>Kanallarda yönetici olan hesabınla giriş yap.</p>
 <input id="phone" placeholder="+905xxxxxxxxx"><button onclick="sendCode()">Kod gönder</button>
 <div id="codebox" class="hide"><input id="code" placeholder="Telegram'dan gelen kod">
-<input id="pw" type="password" placeholder="İki adımlı şifre varsa (yoksa boş bırak)">
-<button onclick="signIn()">Giriş yap</button></div></div>
+<input id="pw" type="password" placeholder="İki adımlı şifre (varsa)"><button onclick="signIn()">Giriş yap</button></div></div></div>
 
-<div class="card hide" id="s-ready"><h2>3. Kanallar</h2>
-<p>Giriş yapılan hesap: <b id="me"></b> <button class="sec" onclick="logout()">Çıkış</button></p>
-<textarea id="links" placeholder="Her satıra bir davet bağlantısı:&#10;https://t.me/+AbCdEf...&#10;https://t.me/kanaladim"></textarea>
-<button id="go" onclick="scan()">Üyeleri çek</button>
-<a id="dl" class="btn hide" href="/download">Excel'i indir</a>
-<pre id="log" class="hide"></pre></div>
+<div id="s-ready" class="hide">
+<div class="tiles" id="tiles"></div>
+
+<div class="grid">
+ <div class="card"><h2>Toplam üye (taramalara göre)</h2><div id="chart"></div></div>
+ <div class="card"><h2>Kanal ekle</h2>
+  <textarea id="links" placeholder="Her satıra bir davet bağlantısı&#10;https://t.me/+AbCdEf...&#10;https://t.me/kanaladim"></textarea>
+  <div class="row" style="margin-top:8px"><button onclick="addCh()">Kanalları ekle</button>
+  <span class="mut">Yalnızca yönetici olduğun kanallar eklenir.</span></div>
+  <pre id="log" class="hide"></pre></div>
+</div>
+
+<div class="card"><div class="row" style="margin-bottom:8px"><h2 style="flex:1;margin:0">Kanallar</h2>
+ <button onclick="scanAll()" id="scanAll">Hepsini tara</button>
+ <a class="btn sec" href="/download">Hepsini Excel indir</a></div>
+ <div class="tw"><table><thead><tr><th>Kanal</th><th class="num">Üye</th><th class="num">Yeni</th><th class="num">Ayrılan</th><th>Son tarama</th><th></th></tr></thead>
+ <tbody id="chrows"></tbody></table></div></div>
+
+<div class="card"><div class="row" style="margin-bottom:8px"><h2 style="flex:1;margin:0">Üyeler</h2>
+ <select id="fch" onchange="loadM(0)"><option value="">Tüm kanallar</option></select>
+ <input id="q" placeholder="ID, kullanıcı adı veya isim ara" oninput="clearTimeout(window.t);window.t=setTimeout(()=>loadM(0),300)">
+ <a class="btn sec" id="dlf" href="/download">Excel indir</a></div>
+ <div class="tw"><table><thead><tr><th>Telegram ID</th><th>Kullanıcı adı</th><th>Ad Soyad</th><th>Kanal</th><th>Katılma</th><th></th></tr></thead>
+ <tbody id="mrows"></tbody></table></div>
+ <div class="row" style="margin-top:10px"><button class="sec s" onclick="loadM(off-50)">‹ Önceki</button>
+ <span class="mut" id="pg"></span><button class="sec s" onclick="loadM(off+50)">Sonraki ›</button></div></div>
+</div>
 </main>
 <script>
-const $=id=>document.getElementById(id);
-async function api(p,b){const r=await fetch(p,b===undefined?{}:{method:'POST',body:JSON.stringify(b)});const j=await r.json();if(j.error){$('msg').textContent=j.error;throw j.error}$('msg').textContent='';return j}
+const $=id=>document.getElementById(id);let off=0,busy=false;
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function api(p,b){const r=await fetch(p,b===undefined?{}:{method:'POST',body:JSON.stringify(b)});const j=await r.json();
+ if(j.error){$('msg').textContent=j.error;throw j.error}$('msg').textContent='';return j}
 async function refresh(){const s=await api('/api/state');
- for(const k of['config','login','ready'])$('s-'+k).classList.toggle('hide',s.step!==k);
- if(s.me)$('me').textContent=s.me}
+ for(const k of['config','login'])$('s-'+k).classList.toggle('hide',s.step!==k);
+ $('s-ready').classList.toggle('hide',s.step!=='ready');$('logout').classList.toggle('hide',s.step!=='ready');
+ $('me').textContent=s.me||'';if(s.step==='ready'){load()}}
 async function saveCfg(){await api('/api/config',{api_id:$('api_id').value,api_hash:$('api_hash').value});refresh()}
 async function sendCode(){await api('/api/send_code',{phone:$('phone').value});$('codebox').classList.remove('hide')}
 async function signIn(){await api('/api/sign_in',{code:$('code').value,password:$('pw').value});refresh()}
 async function logout(){await api('/api/logout',{});refresh()}
-async function scan(){await api('/api/scan',{links:$('links').value});$('log').classList.remove('hide');$('dl').classList.add('hide');$('go').disabled=true;poll()}
-async function poll(){const s=await api('/api/status');$('log').textContent=s.log.join('\n');
- if(s.running){setTimeout(poll,1000)}else{$('go').disabled=false;if(Object.keys(s.counts).length)$('dl').classList.remove('hide')}}
+const n=v=>v==null?'–':v.toLocaleString('tr-TR');
+const delta=(v,c)=>v==null?'<span class="mut">–</span>':`<span class="${c}">${v?(c=='up'?'+':'−')+v:0}</span>`;
+async function load(){const d=await api('/api/dashboard');
+ const T=[['Kanal',d.channels.length],['Toplam üye (kanal bazlı)',d.sum],['Benzersiz kişi',d.unique],['Birden çok kanalda',d.multi],['Bot',d.bots],['Silinmiş hesap',d.deleted]];
+ $('tiles').innerHTML=T.map(([a,b])=>`<div class="tile"><b>${n(b)}</b><span>${a}</span></div>`).join('');
+ $('chrows').innerHTML=d.channels.map(c=>`<tr><td><b>${esc(c.title)}</b>${c.error?`<div class="dn" style="font-size:12px">${esc(c.error)}</div>`:''}</td>
+  <td class="num">${n(c.total)}</td><td class="num">${delta(c.new,'up')}</td><td class="num">${delta(c.left,'dn')}</td>
+  <td class="mut">${c.last_scan||'Henüz taranmadı'}</td>
+  <td><button class="s" onclick="scanOne(${c.id})">Tara</button> <a class="btn sec s" href="/download?channel=${c.id}">Excel</a>
+  <button class="sec s" onclick="del(${c.id},'${esc(c.title).replace(/'/g,'')}')">Sil</button></td></tr>`).join('')||'<tr><td colspan=6 class="mut">Henüz kanal yok. Sağ üstten davet bağlantısı ekle.</td></tr>';
+ const sel=$('fch'),cur=sel.value;sel.innerHTML='<option value="">Tüm kanallar</option>'+d.channels.map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('');sel.value=cur;
+ chart(d.series);loadM(0)}
+function chart(s){const el=$('chart');if(s.length<1){el.innerHTML='<p class="mut">Grafik için en az bir tarama gerekli.</p>';return}
+ const W=640,H=200,p=34,xs=s.map((_,i)=>s.length==1?W/2:p+i*(W-2*p)/(s.length-1)),mx=Math.max(...s.map(a=>a[1])),mn=Math.min(...s.map(a=>a[1])),r=(mx-mn)||1;
+ const ys=s.map(a=>H-p-(a[1]-mn)/r*(H-2*p)),pts=xs.map((x,i)=>x+','+ys[i]).join(' ');
+ el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%"><polyline fill="none" stroke="var(--ac)" stroke-width="2.5" points="${pts}"/>
+ ${xs.map((x,i)=>`<circle cx="${x}" cy="${ys[i]}" r="3.5" fill="var(--ac)"><title>${s[i][0]}: ${n(s[i][1])}</title></circle>`).join('')}
+ <text x="${p}" y="${H-8}">${s[0][0]}</text><text x="${W-p}" y="${H-8}" text-anchor="end">${s[s.length-1][0]}</text>
+ <text x="4" y="${p}">${n(mx)}</text><text x="4" y="${H-p}">${n(mn)}</text></svg>`}
+async function loadM(o){off=Math.max(0,o);const ch=$('fch').value,q=$('q').value;
+ const d=await api(`/api/members?channel=${ch}&q=${encodeURIComponent(q)}&limit=50&offset=${off}`);
+ $('mrows').innerHTML=d.rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]?'@'+esc(r[1]):'<span class="mut">–</span>'}</td><td>${esc((r[2]+' '+r[3]).trim())}${r[4]?' 🤖':''}${r[5]?' <span class="mut">(silinmiş)</span>':''}</td><td>${esc(r[7])}</td><td class="mut">${r[6]||'–'}</td>
+ <td><button class="sec s" onclick="navigator.clipboard.writeText('${r[0]}')">ID kopyala</button></td></tr>`).join('')||'<tr><td colspan=6 class="mut">Kayıt yok.</td></tr>';
+ $('pg').textContent=`${d.total?off+1:0}–${Math.min(off+50,d.total)} / ${n(d.total)}`;$('dlf').href='/download'+(ch?'?channel='+ch:'')}
+async function addCh(){await api('/api/add',{links:$('links').value});$('links').value='';poll()}
+async function scanAll(){await api('/api/scan',{});poll()}
+async function scanOne(id){await api('/api/scan',{channel_id:id});poll()}
+async function del(id,t){if(confirm(t+' ve kayıtlı üyeleri silinsin mi?')){await api('/api/delete',{channel_id:id});load()}}
+async function poll(){$('log').classList.remove('hide');const s=await api('/api/status');$('log').textContent=s.log.join('\n');
+ if(s.running)setTimeout(poll,1000);else load()}
 refresh();
 </script></body></html>

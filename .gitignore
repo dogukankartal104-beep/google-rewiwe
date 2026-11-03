@@ -9,3 +9,4 @@ coverage/
 telegram-panel/ayarlar.json
 telegram-panel/*.session
 telegram-panel/*.session-journal
+telegram-panel/veri.db
