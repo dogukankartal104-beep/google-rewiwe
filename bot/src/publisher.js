@@ -386,3 +386,83 @@ export async function snapshotChannels() {
     }
   }
 }
+
+/* ---------------- 9) HABER ----------------
+   Flaş haber: eşiği geçen haberi HER İKİ kanala da anında atar.
+   Haber dökümü değil — sistemin o anki durumuyla ilişkilendirilir. */
+export async function publishBreakingNews() {
+  if (!ENV.newsOn) return 0;
+  const news = await import('./news.js');
+
+  // günlük tavan
+  try {
+    const since = new Date(trDayStart()).toISOString();
+    const bugun = (await db.newsSince(since)) || [];
+    const flas = bugun.filter((x) => x.channel === 'free' || x.channel === 'vip');
+    const tekil = new Set(flas.map((x) => x.uid)).size;
+    if (tekil >= ENV.newsMaxPerDay) return 0;
+  } catch (e) { warn('haber kotası:', e.message); }
+
+  let item;
+  try { item = await news.pickBreaking(); }
+  catch (e) { warn('haber toplama:', e.message); return 0; }
+  if (!item) return 0;
+
+  const ctx = {
+    btc15: MARKET.btc15,
+    shock: MARKET.shock,
+    rejim: MARKET.reg?.label || null,
+    openN: null,
+  };
+  try { ctx.openN = ((await db.openSignals()) || []).length; } catch { /* yoksay */ }
+
+  const { text } = M.newsFlash(item, ctx);
+  let n = 0;
+  for (const [channel, chatId, aktif] of [
+    ['vip', ENV.vipChat, ENV.postVip],
+    ['free', ENV.freeChat, ENV.postFree],
+  ]) {
+    if (!chatId || !aktif) continue;
+    try {
+      const msg = await tg.send(chatId, text);
+      await db.newsAdd({
+        uid: item.uid + (channel === 'free' ? '-f' : ''),
+        title: item.title, url: item.url, source: item.source,
+        score: item.score, tags: (item.tags || []).join(','),
+        channel, message_id: msg?.message_id ?? null,
+      });
+      n++;
+    } catch (e) { warn(`haber (${channel}):`, e.message); }
+  }
+  if (n) log(`flaş haber yayınlandı (${item.score}p): ${item.title.slice(0, 70)}`);
+  return n;
+}
+
+/* Günlük haber özeti — akşam, tek mesaj. */
+export async function publishNewsDigest() {
+  if (!ENV.newsOn) return 0;
+  const key = dayKey();
+  const news = await import('./news.js');
+  let items = [];
+  try { items = await news.digest(5); }
+  catch (e) { warn('haber özeti:', e.message); return 0; }
+
+  const ctx = { btc15: MARKET.btc15, rejim: MARKET.reg?.label, breadth: MARKET.breadth };
+  const { text } = M.newsDigest(items, ctx);
+
+  let n = 0;
+  for (const [channel, chatId, aktif] of [
+    ['free', ENV.freeChat, ENV.postFree],
+    ['vip', ENV.vipChat, ENV.postVip],
+  ]) {
+    if (!chatId || !aktif) continue;
+    if (await db.postExists('news', channel, key)) continue;
+    try {
+      const msg = await tg.send(chatId, text);
+      await db.postOnce('news', channel, key, msg?.message_id ?? null);
+      n++;
+    } catch (e) { warn(`haber özeti (${channel}):`, e.message); }
+  }
+  if (n) log(`haber özeti yayınlandı (${items.length} haber)`);
+  return n;
+}

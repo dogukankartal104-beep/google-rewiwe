@@ -95,6 +95,13 @@ export const ENV = {
   monthlyDay: Number(str('MONTHLY_DAY', '1')),
   dryRun: bool('DRY_RUN', false),                 // true: Telegram'a göndermez, loglar
 
+  // --- haber motoru ---
+  newsOn: bool('NEWS_ON', true),
+  newsMinScore: Number(str('NEWS_MIN_SCORE', '38')),  // bu puanın üstü "flaş haber"
+  newsCheckMin: Number(str('NEWS_CHECK_MIN', '20')),  // kaç dakikada bir bakılsın
+  newsMaxPerDay: Number(str('NEWS_MAX_PER_DAY', '4')),// günde en fazla kaç flaş haber
+  newsDigestHour: Number(str('NEWS_DIGEST_HOUR', '19')), // günlük haber özeti saati
+
   // --- eğitim içeriği ---
   eduOn: bool('EDU_ON', true),
   eduHour: Number(str('EDU_HOUR', '13')),         // TR saati
@@ -109,9 +116,8 @@ export const ENV = {
   // --- dashboard ---
   dashKey: str('DASHBOARD_KEY'),                  // /dash?key=... ; boşsa dashboard kapalı
 
-  // --- Supabase ---
-  sbUrl: str('SUPABASE_URL'),
-  sbKey: str('SUPABASE_SERVICE_ROLE_KEY'),
+  // --- veritabanı (Railway Postgres) ---
+  dbUrl: str('DATABASE_URL'),
 
   // --- NOWPayments ---
   npApiKey: str('NOWPAYMENTS_API_KEY'),
@@ -141,7 +147,6 @@ export function missingEnv() {
   if (!ENV.botToken) miss.push('TELEGRAM_BOT_TOKEN');
   if (!ENV.freeChat && ENV.postFree) miss.push('FREE_CHANNEL_ID');
   if (!ENV.vipChat && ENV.postVip) miss.push('VIP_CHANNEL_ID');
-  if (!ENV.sbUrl) miss.push('SUPABASE_URL');
-  if (!ENV.sbKey) miss.push('SUPABASE_SERVICE_ROLE_KEY');
+  if (!ENV.dbUrl) miss.push('DATABASE_URL');
   return miss;
 }

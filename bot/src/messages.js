@@ -528,3 +528,74 @@ export function eduPost(lesson, { forFree = false, idx = null, total = null } = 
   }
   return { text: lines.join('\n') };
 }
+
+/* ============================================================
+   HABER — flaş haber ve günlük özet
+   Haber bir "haber dökümü" değil: her zaman SİSTEMLE ilişkilendirilir.
+   ============================================================ */
+export function newsFlash(item, ctx = {}) {
+  const lines = [];
+  const yas = dur(Date.now() - item.at);
+  lines.push(`🚨 <b>ÖNEMLİ HABER</b>${item.tags?.length ? ` · ${item.tags[0]}` : ''}`);
+  lines.push('');
+  lines.push(`<b>${item.title}</b>`);
+  lines.push(`<i>${item.source} · ${yas} önce</i>`);
+  if (item.url) lines.push(`<a href="${item.url}">haberi oku →</a>`);
+  lines.push('');
+
+  if (item.why) {
+    lines.push('<b>Neden önemli?</b>');
+    lines.push(item.why);
+    lines.push('');
+  }
+
+  // sistemin o anki durumu — haberi bağlama oturtur
+  const d = [];
+  if (ctx.btc15 != null) d.push(`BTC 15dk <b>${pct(ctx.btc15)}</b>`);
+  if (ctx.rejim) d.push(ctx.rejim);
+  if (ctx.shock != null && ctx.shock > 2.5) d.push(`⚡ şok ${fmt(ctx.shock, 1)}× ATR`);
+  if (d.length) {
+    lines.push('<b>Şu an piyasa</b>');
+    lines.push(d.join(' · '));
+    if (ctx.shock > 2.5) {
+      lines.push('Sistem <b>yeni pozisyon açmıyor</b> — şok hareketinde teknik yapı güvenilmez.');
+    } else if (ctx.openN) {
+      lines.push(`${ctx.openN} açık pozisyon takip ediliyor.`);
+    }
+    lines.push('');
+  }
+
+  if (item.lang === 'en') {
+    lines.push('<i>Başlık kaynağın özgün dilinde bırakıldı — çeviride anlam kaymasın diye.</i>');
+    lines.push('');
+  }
+  lines.push(`<i>${UYARI}</i>`);
+  return { text: lines.join('\n') };
+}
+
+export function newsDigest(items, ctx = {}) {
+  const lines = [];
+  lines.push(`📰 <b>GÜNÜN KRİPTO GÜNDEMİ</b> · ${trShort(Date.now())}`);
+  lines.push('');
+  if (!items.length) {
+    lines.push('Bugün piyasayı etkileyecek öne çıkan bir gelişme yakalanmadı.');
+    lines.push('Sessiz gün, kötü gün değildir — sistem kurulum beklemeye devam ediyor.');
+  } else {
+    items.forEach((it, i) => {
+      lines.push(`<b>${i + 1}.</b> ${it.title}`);
+      lines.push(`<i>${it.source}${it.tags?.length ? ' · ' + it.tags.join(', ') : ''}</i>`);
+      if (it.url) lines.push(`<a href="${it.url}">oku →</a>`);
+      lines.push('');
+    });
+  }
+  const d = [];
+  if (ctx.btc15 != null) d.push(`BTC 15dk ${pct(ctx.btc15)}`);
+  if (ctx.rejim) d.push(ctx.rejim);
+  if (ctx.breadth) d.push(`${ctx.breadth.up}↑/${ctx.breadth.dn}↓`);
+  if (d.length) {
+    lines.push('<b>Piyasa durumu:</b> ' + d.join(' · '));
+    lines.push('');
+  }
+  lines.push(`<i>${UYARI}</i>`);
+  return { text: lines.join('\n') };
+}

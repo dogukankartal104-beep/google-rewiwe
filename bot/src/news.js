@@ -1,0 +1,233 @@
+/* Haber motoru — RSS tabanlı, API anahtarı GEREKMEZ.
+   Türkçe kaynaklar önceliklidir (çeviri uydurmamak için). İngilizce kaynaklar
+   sadece yüksek puanlı "flaş" haberler için kullanılır ve başlık ORİJİNAL
+   bırakılır; altına Türkçe "neden önemli" satırı eklenir.
+
+   Çalışma mantığı:
+   1. Feed'ler çekilir (her biri bağımsız; biri patlarsa diğerleri devam eder)
+   2. Başlık anahtar kelimelere göre PUANLANIR
+   3. Eşiği geçen haber anında yayınlanır, gerisi günlük özete girer
+   4. news_log ile tekrar yayın engellenir
+*/
+import crypto from 'node:crypto';
+import { ENV } from './config.js';
+import { log, warn, trDateTime, dur } from './util.js';
+import * as db from './db.js';
+
+/* ---------------- KAYNAKLAR ----------------
+   NEWS_FEEDS env'i ile tamamen değiştirilebilir (virgülle ayrılmış URL listesi).
+   lang: 'tr' olanlar tercih edilir. */
+const DEFAULT_FEEDS = [
+  { url: 'https://kriptokoin.com/feed/', name: 'Kriptokoin', lang: 'tr' },
+  { url: 'https://coin-turk.com/feed', name: 'CoinTürk', lang: 'tr' },
+  { url: 'https://uzmancoin.com/feed/', name: 'Uzmancoin', lang: 'tr' },
+  { url: 'https://www.bitcoinsistemi.com/feed/', name: 'Bitcoin Sistemi', lang: 'tr' },
+  { url: 'https://cointelegraph.com/rss', name: 'Cointelegraph', lang: 'en' },
+  { url: 'https://decrypt.co/feed', name: 'Decrypt', lang: 'en' },
+];
+
+export function feeds() {
+  const raw = (process.env.NEWS_FEEDS || '').trim();
+  if (!raw) return DEFAULT_FEEDS;
+  return raw.split(',').map((x) => x.trim()).filter(Boolean).map((url) => {
+    let host = url;
+    try { host = new URL(url).hostname.replace(/^www\./, ''); } catch { /* yoksay */ }
+    return { url, name: host, lang: /\.tr\b|turk|kripto|koin|coin-turk/i.test(url) ? 'tr' : 'en' };
+  });
+}
+
+/* ---------------- PUANLAMA ----------------
+   Yüksek puan = dikkat çeker + piyasayı gerçekten etkiler.
+   TR ve EN karşılıkları birlikte aranır. */
+/* DİKKAT — Türkçe metinde \b KULLANILMAZ.
+   JavaScript'te \b sınırı \w = [A-Za-z0-9_] üzerinden tanımlıdır; ç,ğ,ı,ö,ş,ü
+   bu kümede olmadığı için "\bçalın" ifadesi " çalındı" içinde EŞLEŞMEZ.
+   Bunun yerine Unicode harf/rakam olmayan bir sınır kullanıyoruz. */
+const W = (...terms) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])(${terms.join('|')})`, 'iu');
+
+const RULES = [
+  // --- kritik: ani likidite olayları ---
+  { p: 50, tag: 'GÜVENLİK',
+    re: W('hack', 'hackle', 'hacked', 'exploit', 'istismar', 'saldır', 'breach',
+      'ihlal', 'çalın', 'çalınd', 'stolen', 'drain', 'güvenlik açığ', 'siber'),
+    why: 'Borsa veya protokol güvenlik olayları ani likidite kaçışı yaratır. Defter incelir, kayma artar, stoplar beklenmedik yerde çalışır.' },
+  { p: 45, tag: 'İFLAS',
+    re: W('iflas', 'bankrupt', 'insolven', 'çöktü', 'collapse', 'battı', 'batti',
+      'halted withdrawal', 'çekim durdur', 'çekimleri durdur', 'konkordato'),
+    why: 'Bir kurumun çökmesi zincirleme likidasyon başlatır. Böyle anlarda teknik yapı anlamını yitirir.' },
+  { p: 42, tag: 'LİKİDASYON',
+    // sıra bağımsız: "1.2 milyar dolarlık likidasyon" da "likidasyon 1.2 milyar" da yakalanmalı
+    re: {
+      test: (t) => /(?<![\p{L}\p{N}])(likidasyon|liquidation|tasfiye)/iu.test(t)
+        && /(?<![\p{L}\p{N}])(milyar|billion|milyon|million|rekor|record)/iu.test(t),
+    },
+    why: 'Büyük likidasyon dalgası yakıtın bittiğini veya yeni başladığını gösterir — sistemin OI analiziyle doğrudan ilgili.' },
+
+  // --- düzenleme ---
+  { p: 38, tag: 'DÜZENLEME',
+    re: W('SEC', 'CFTC', 'yasak', 'ban ', 'dava', 'lawsuit', 'soruşturma',
+      'investigat', 'regülasyon', 'regulation', 'mahkeme', 'court', 'ceza', 'SPK'),
+    why: 'Düzenleyici haberler yön değiştirici olabilir; teknik kurulumları geçersiz kılar.' },
+  { p: 36, tag: 'ETF', re: W('ETF'),
+    why: 'ETF akışları spot talebi doğrudan etkiler — sistemin "spot sürüklü mü" sorusuna bakar.' },
+
+  // --- makro ---
+  { p: 40, tag: 'MAKRO',
+    re: W('FED', 'FOMC', 'faiz', 'interest rate', 'enflasyon', 'inflation',
+      'CPI', 'NFP', 'istihdam', 'powell', 'tarım dışı'),
+    why: 'Makro veri anlarında oynaklık patlar ve korelasyon 1\'e yaklaşır. Sistem bu pencerede yeni pozisyon açmaz.' },
+
+  // --- borsa / listeleme ---
+  { p: 30, tag: 'BORSA',
+    re: W('delist', 'listeden çıkar', 'listeleme', 'listing', 'binance',
+      'coinbase', 'okx', 'bybit', 'upbit', 'kraken'),
+    why: 'Listeleme ve çıkarma haberleri tek coinde sert, kısa ömürlü hareket yaratır — tipik fade tuzağı.' },
+  { p: 24, tag: 'BALİNA',
+    re: {
+      test: (t) => /(?<![\p{L}\p{N}])(balina|whale)/iu.test(t)
+        || (/(?<![\p{L}\p{N}])(transfer|moved|taşıd)/iu.test(t)
+            && /(?<![\p{L}\p{N}])(milyar|billion|milyon|million)/iu.test(t)),
+    },
+    why: 'Büyük transferler satış veya toplama hazırlığı olabilir; emir defterinde iz bırakır.' },
+
+  // --- ağ / proje ---
+  { p: 25, tag: 'AĞ',
+    re: W('halving', 'yarılanma', 'hard fork', 'upgrade', 'güncelleme',
+      'mainnet', 'airdrop', 'unlock', 'kilit açıl', 'token açılım'),
+    why: 'Arz tarafını değiştiren olaylar — özellikle token kilidi açılmaları — fiyatı günlerce baskılayabilir.' },
+  { p: 22, tag: 'RUG',
+    re: W('rug ?pull', 'rugpull', 'dolandırıc', 'scam', 'ponzi', 'sahte', 'kayıplara karış'),
+    why: 'Dolandırıcılık haberleri o coinde kalıcı güven kaybı demektir; "ucuzladı" diye alınmaz.' },
+
+  // --- genel piyasa ---
+  { p: 18, tag: 'PİYASA',
+    re: W('ATH', 'rekor', 'record high', 'çöküş', 'crash', 'ralli', 'rally',
+      'sert düş', 'sert yüksel', 'plunge', 'soar', 'uçtu', 'dipten döndü'),
+    why: 'Sert hareketler sistemin aradığı tükenme kurulumlarını üretir — ama önce üç faz onayı gerekir.' },
+];
+
+const BIG = /\b(bitcoin|btc|ethereum|eth|binance|coinbase|tether|usdt|solana|xrp)\b/i;
+
+export function scoreItem(title, { lang = 'tr' } = {}) {
+  const t = String(title || '');
+  let score = 0;
+  const tags = [];
+  let why = null;
+  for (const r of RULES) {
+    if (r.re.test(t)) {
+      score += r.p;
+      tags.push(r.tag);
+      if (!why) why = r.why;
+    }
+  }
+  if (score && BIG.test(t)) score += 10;      // büyük isim geçiyorsa daha çok ilgi görür
+  if (lang === 'en') score -= 8;              // Türkçe kaynak tercih edilir
+  return { score, tags, why };
+}
+
+/* ---------------- RSS AYRIŞTIRMA (bağımlılıksız) ---------------- */
+const decode = (s) => String(s || '')
+  .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+  .replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&nbsp;/g, ' ')
+  .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+  .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
+  .replace(/&amp;/g, '&');          // en son: &amp;lt; gibi çift kodlamayı bozmamak için
+
+/* Atom feed'lerde başlık type="html" olabilir ve etiketler &lt;b&gt; şeklinde
+   KODLANMIŞ gelir. O yüzden önce çöz, sonra etiket temizle, sonra tekrar çöz. */
+const strip = (s) => decode(
+  decode(String(s || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1'))
+    .replace(/<[^>]+>/g, '')
+).replace(/\s+/g, ' ').trim();
+
+const tagOf = (block, name) => {
+  const m = new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, 'i').exec(block);
+  return m ? strip(m[1]) : '';
+};
+
+export function parseFeed(xml) {
+  const out = [];
+  // RSS <item> ve Atom <entry>
+  const blocks = [
+    ...String(xml).matchAll(/<item[\s>][\s\S]*?<\/item>/gi),
+    ...String(xml).matchAll(/<entry[\s>][\s\S]*?<\/entry>/gi),
+  ].map((m) => m[0]);
+
+  for (const b of blocks) {
+    const title = tagOf(b, 'title');
+    if (!title) continue;
+    let link = tagOf(b, 'link');
+    if (!link) {
+      const m = /<link[^>]*href=["']([^"']+)["']/i.exec(b);   // Atom
+      if (m) link = m[1];
+    }
+    const dateRaw = tagOf(b, 'pubDate') || tagOf(b, 'published') || tagOf(b, 'updated');
+    const t = dateRaw ? Date.parse(dateRaw) : NaN;
+    out.push({
+      title,
+      url: link || '',
+      at: Number.isFinite(t) ? t : Date.now(),
+    });
+  }
+  return out;
+}
+
+const uidOf = (item) =>
+  crypto.createHash('sha1')
+    .update((item.url || '') + '|' + item.title.toLowerCase().slice(0, 120))
+    .digest('hex').slice(0, 24);
+
+async function fetchFeed(f) {
+  try {
+    const r = await fetch(f.url, {
+      signal: AbortSignal.timeout(15000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; fade-bot/1.0)', Accept: 'application/rss+xml, application/xml, text/xml, */*' },
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const xml = await r.text();
+    const items = parseFeed(xml);
+    if (!items.length) throw new Error('içerik ayrıştırılamadı');
+    return items.map((i) => ({ ...i, source: f.name, lang: f.lang }));
+  } catch (e) {
+    warn(`haber kaynağı (${f.name}): ${e.message}`);
+    return [];
+  }
+}
+
+/* Son N saatteki haberleri topla, puanla, sırala. */
+export async function collect({ hours = 6 } = {}) {
+  const list = feeds();
+  const all = (await Promise.all(list.map(fetchFeed))).flat();
+  const since = Date.now() - hours * 3600e3;
+  const seen = new Set();
+  const out = [];
+  for (const it of all) {
+    if (it.at < since) continue;
+    const uid = uidOf(it);
+    if (seen.has(uid)) continue;
+    seen.add(uid);
+    const s = scoreItem(it.title, { lang: it.lang });
+    out.push({ ...it, uid, ...s });
+  }
+  out.sort((a, b) => b.score - a.score || b.at - a.at);
+  return out;
+}
+
+/* Eşiği geçen, daha önce yayınlanmamış en iyi haberi bul. */
+export async function pickBreaking(minScore = ENV.newsMinScore) {
+  const items = await collect({ hours: 6 });
+  for (const it of items) {
+    if (it.score < minScore) break;        // sıralı, gerisi daha düşük
+    try { if (await db.newsSeen(it.uid)) continue; }
+    catch { /* db yoksa yine de yayınla */ }
+    return it;
+  }
+  return null;
+}
+
+/* Günlük özet için: eşiği geçmeyen ama ilgi çekici haberler. */
+export async function digest(n = 5) {
+  const items = await collect({ hours: 24 });
+  return items.filter((x) => x.score > 0).slice(0, n);
+}

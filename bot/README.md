@@ -108,16 +108,22 @@ Alternatif: mesajı [@userinfobot](https://t.me/userinfobot)'a ilet.
 
 Kendi id'ni de [@userinfobot](https://t.me/userinfobot) ile bul → `ADMIN_IDS`.
 
-### 2) Supabase
-1. [supabase.com](https://supabase.com) → yeni proje (ücretsiz katman yeter).
-2. **SQL Editor** → `sql/schema.sql` dosyasının tamamını yapıştır → **Run**.
-   Sonra `sql/002_dashboard.sql` dosyasını da aynı şekilde çalıştır.
-3. **Project Settings → API**:
-   - `Project URL` → `SUPABASE_URL`
-   - `service_role` anahtarı → `SUPABASE_SERVICE_ROLE_KEY`
+### 2) Veritabanı — Railway Postgres
 
-> `service_role` anahtarı tüm tabloya yazabilir. Sadece Railway'in Variables
-> kısmında dursun, hiçbir yere commit etme, kimseyle paylaşma.
+Harici hiçbir servise kaydolman gerekmez. Railway içinde:
+
+1. Projende **+ New → Database → PostgreSQL**
+2. Bot servisinin **Variables** kısmına şunu ekle:
+   `DATABASE_URL=${{Postgres.DATABASE_URL}}`
+   (Railway bunu otomatik doldurur)
+
+**Tabloları bot kendisi kurar.** Açılışta `migrate()` çalışır ve eksik tablo
+varsa oluşturur. Elle SQL çalıştırman gerekmez, bir dosya yapıştırman gerekmez.
+Yeni sürümde yeni tablo gelirse de aynı şekilde otomatik eklenir.
+
+> Supabase kullanmak istersen de çalışır: Supabase'in verdiği bağlantı
+> dizesini (Settings → Database → Connection string) `DATABASE_URL`'e koyman
+> yeterli. Kod tek bir Postgres yolu kullanıyor.
 
 ### 3) Railway
 1. [railway.app](https://railway.app) → **New Project → Deploy from GitHub repo**
@@ -167,7 +173,7 @@ cd bot && npm install && npm run selftest
 
 ```
 ✅ zorunlu ayarlar tamam
-✅ Supabase bağlantısı çalışıyor
+✅ Postgres bağlantısı çalışıyor, tablolar hazır
 ✅ Telegram botu: @senin_botun
 ✅ FREE kanalı erişilebilir (N üye)
 ✅ VIP kanalı erişilebilir (N üye)
@@ -219,6 +225,8 @@ Her şey tamamsa `DRY_RUN=false` yap.
 | Haftalık tablo | `WEEKLY_DAY`, `DAILY_HOUR`:10 | ikisi + sabitlenir |
 | Aylık tablo | ayın `MONTHLY_DAY`'i, `DAILY_HOUR`:20 | ikisi + sabitlenir |
 | Eğitim postu | `EDU_HOUR`:00 (vars. 13:00) | ikisi (free'de VIP çağrısı var) |
+| Flaş haber | eşiği geçen haber çıkınca (max `NEWS_MAX_PER_DAY`/gün) | ikisi |
+| Haber özeti | `NEWS_DIGEST_HOUR`:00 (vars. 19:00) | ikisi |
 | Abone fotoğrafı | 09:00 ve 21:00 | — (dashboard için) |
 | VIP süre/hatırlatma taraması | her saat başı | DM |
 
@@ -245,8 +253,8 @@ açıksa yeni sinyal **kaydedilir ama yayınlanmaz** (`status='atlandı'`). Böy
 WebSocket açılmazsa ilgili kontroller "bilinmiyor" sayılır ve sistem REST verisiyle
 devam eder — çökmez, ama teyit skoru düşer, dolayısıyla sınıf da düşebilir.
 
-**Supabase erişilemezse** bot sinyal yayınlamaz (kayıt tutamadığı için takip de
-edemez) ama çökmez; bağlantı dönünce kaldığı yerden devam eder.
+**Veritabanı erişilemezse** bot sinyal yayınlamaz (kayıt tutamadığı için takip
+de edemez) ama çökmez; bağlantı dönünce kaldığı yerden devam eder.
 
 ---
 
@@ -296,18 +304,16 @@ bot/
 │   ├── payments.js     NOWPayments fatura + IPN imza
 │   ├── vip.js          üyelik ver/hatırlat/çıkar
 │   ├── server.js       IPN webhook + /health
-│   ├── db.js           Supabase (PostgREST) katmanı
+│   ├── db.js           Postgres katmanı + otomatik tablo kurulumu
 │   └── util.js         biçimleme, TR saat, seans, havuz
-├── sql/
-│   ├── schema.sql      Supabase şeması
-│   └── 002_dashboard.sql  dashboard / eğitim / tıklama tabloları
-├── test/               114 test (ağ gerektirmez)
+├── test/               139 test (ağ gerektirmez)
 ├── railway.json
 └── .env.example
 ```
 
-Bağımlılık: sadece `ws` (WebSocket teyidi için). Telegram, Binance, NOWPayments
-ve Supabase çağrıları yerleşik `fetch` ile yapılır.
+Bağımlılık: `pg` (Postgres) ve `ws` (opsiyonel, WebSocket teyidi — Node 22'de
+yerleşik WebSocket kullanılır). Telegram, Binance, NOWPayments ve RSS çağrıları
+yerleşik `fetch` ile yapılır.
 
 ---
 
@@ -325,7 +331,7 @@ otomatik eklenir; kaldırma.
 
 Ayrı bir Railway servisi **yok** — panel botun kendi HTTP sunucusunda çalışır,
 ek maliyeti yoktur. Veri 60 saniye önbelleklenir, böylece sayfa yenilendikçe
-Supabase yorulmaz.
+veritabanı yorulmaz.
 
 **Açmak için:** `DASHBOARD_KEY` değişkenine uzun ve rastgele bir metin yaz.
 Sonra Telegram'da bota `/dash` yaz — linki sana gönderir.
@@ -399,3 +405,79 @@ Maliyeti düşük tutan ayarlar:
 Daha da kısmak istersen: `SCAN_INTERVAL_SEC=180`, `SCAN_TOP=40`,
 `WS_CONFIRM=false`, `SECTOR_CHECK=false`. Bunlar sinyal kalitesini bir miktar
 düşürür (teyit skoru azalır → sınıf düşebilir), tarama sıklığını azaltır.
+
+---
+
+## Haber motoru
+
+API anahtarı **gerekmez** — RSS ile çalışır.
+
+**Nasıl çalışır:**
+1. Her `NEWS_CHECK_MIN` dakikada kaynaklar taranır (varsayılan 20 dk)
+2. Her başlık anahtar kelimelere göre **puanlanır**
+3. `NEWS_MIN_SCORE` üstü = **flaş haber**, anında iki kanala da gider
+4. Günde en fazla `NEWS_MAX_PER_DAY` flaş haber (spam koruması)
+5. Kalanlar akşam `NEWS_DIGEST_HOUR`'da tek özet mesajda toplanır
+6. Aynı haber iki kez yayınlanmaz (`news_log`)
+
+**Puanlama mantığı** — dikkat çekmesi *ve* piyasayı gerçekten etkilemesi:
+
+| Puan | Kategori | Örnek |
+|---|---|---|
+| 50 | GÜVENLİK | hack, siber saldırı, fon çalınması, güvenlik açığı |
+| 45 | İFLAS | iflas, çekimlerin durması, konkordato |
+| 42 | LİKİDASYON | milyar dolarlık likidasyon dalgası |
+| 40 | MAKRO | Fed, FOMC, faiz, enflasyon, CPI, NFP |
+| 38 | DÜZENLEME | SEC, dava, soruşturma, yasak, SPK |
+| 36 | ETF | ETF giriş/çıkışları |
+| 30 | BORSA | listeleme, listeden çıkarma |
+| 25 | AĞ | halving, güncelleme, token kilidi açılımı |
+| 24 | BALİNA | büyük transferler |
+| 22 | RUG | dolandırıcılık iddiaları |
+| 18 | PİYASA | rekor, sert düşüş, ralli |
+
+Büyük isim (BTC, ETH, Binance...) geçiyorsa **+10**. Birden fazla kural
+eşleşirse puanlar **toplanır** — "SEC soruşturması sonrası iflas başvurusu"
+gibi bir haber 80+ alır.
+
+**Haber dökümü değil, bağlam.** Her flaş haber sistemin o anki durumuyla
+birlikte gider: *"BTC 15dk −2.1% · ⚡ şok 3.2× ATR · Sistem yeni pozisyon
+açmıyor — şok hareketinde teknik yapı güvenilmez."* Amaç haber vermek değil,
+haberi işlem kararına bağlamak.
+
+**Çeviri:** Türkçe kaynaklar önceliklidir (İngilizce kaynak puanından −8 düşer).
+İngilizce bir haber flaş eşiğini geçerse başlık **özgün dilinde** bırakılır ve
+altına Türkçe "neden önemli" açıklaması eklenir. Uydurma çeviri yapılmaz.
+
+### Türkçe metin notu (teknik)
+
+JavaScript'te `\b` kelime sınırı yalnızca `[A-Za-z0-9_]` tanır. Yani
+`/\bçalın/` ifadesi " çalındı" içinde **eşleşmez** — ç harfi `\w` değildir.
+Bu yüzden kurallar Unicode sınırı (`(?<![\p{L}\p{N}])`) ile yazıldı. Yeni
+anahtar kelime eklerken `\b` kullanma, `W(...)` yardımcısını kullan.
+
+**Kaynakları değiştirmek:** `NEWS_FEEDS` env'ine virgülle ayrılmış RSS adresleri
+yaz. Boş bırakırsan varsayılan Türkçe + İngilizce kaynaklar kullanılır.
+`/haber` komutu taramayı puanlarıyla gösterir (yayınlamadan) — kaynakların
+çalışıp çalışmadığını buradan görebilirsin.
+
+---
+
+## Eğitim kütüphanesi
+
+**36 ders**, 21 farklı kategoride. Hepsi sistemin gerçekten kullandığı
+kavramlar üzerine — ve hepsi aynı kalıpta değil:
+
+- **Kavram dersleri** — OI, CVD, aVWAP, ATR, POC/value area, funding,
+  likidasyon kaskadı, emir defteri, beta
+- **Risk dersleri** — pozisyon boyutu, stop yerleştirme, R:R ve süre,
+  komisyon/kayma, kaldıraç gerçeği
+- **"Başına gelebilir" uyarı hikâyeleri** — stop avı, ortalama düşürme,
+  borsa çökmesi, haber pumpı, intikam işlemi
+- **Efsane yıkma** — gizli indikatör yok, sinyal kanalı nasıl ayıklanır
+  (bu kanal dahil), "100 dolardan 10 bin" hikâyeleri
+- **Kontrol listeleri** — işlem öncesi 60 saniye, haftalık gözden geçirme,
+  yeni başlayanlar için ilk 30 gün
+
+Günde 1 ders ≈ 36 gün içerik. Sırayla gider, tekrar etmez.
+Bittiğinde bot log'a yazar; `lessons.js`'e yeni ders ekle, **id'leri değiştirme**.

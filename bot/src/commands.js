@@ -7,7 +7,7 @@ import * as np from './payments.js';
 import * as vip from './vip.js';
 import {
   perfLastDays, publishDaily, publishWeekly, publishMonthly,
-  publishDailyRecap, publishEducation,
+  publishDailyRecap, publishEducation, publishBreakingNews, publishNewsDigest,
 } from './publisher.js';
 import { MARKET } from './scanner.js';
 import { fmt, log, warn, trDateTime, dur, trDayStart } from './util.js';
@@ -166,6 +166,9 @@ async function adminCmd(cmd, args, from, ctx) {
         '/tiklama — VIP link tıklama istatistiği',
         '/tara — şimdi bir tarama turu çalıştır',
         '/egitim — eğitim postunu şimdi yayınla',
+        '/haber — haber taraması (puanlarıyla, yayınlamaz)',
+        '/haberat — flaş haberi şimdi yayınla',
+        '/haberozet — günlük haber özetini şimdi yayınla',
         '/gunluk — günlük analizi şimdi yayınla',
         '/kapanis — gün kapanışını şimdi yayınla',
         '/haftalik — haftalık tabloyu şimdi yayınla',
@@ -258,6 +261,41 @@ async function adminCmd(cmd, args, from, ctx) {
       return true;
     }
 
+    case '/haber': {
+      await tg.send(from.id, 'Haber kaynakları taranıyor…');
+      try {
+        const news = await import('./news.js');
+        const items = await news.collect({ hours: 12 });
+        if (!items.length) {
+          await tg.send(from.id,
+            '❌ Hiç başlık alınamadı. Kaynaklar erişilemiyor olabilir — ' +
+            '<code>NEWS_FEEDS</code> ile değiştirebilirsin.');
+          return true;
+        }
+        const kaynak = [...new Set(items.map((x) => x.source))];
+        const list = items.slice(0, 10).map((x) =>
+          `${String(x.score).padStart(3)} ${x.score >= ENV.newsMinScore ? '🚨' : '  '} ` +
+          `<b>${tg.esc(x.title.slice(0, 70))}</b>\n     <i>${tg.esc(x.source)}` +
+          `${x.tags.length ? ' · ' + x.tags.join(',') : ''}</i>`);
+        await tg.send(from.id, [
+          `<b>HABER TARAMASI</b> (son 12 saat)`,
+          `${items.length} başlık · kaynaklar: ${kaynak.join(', ')}`,
+          `Flaş eşiği: ${ENV.newsMinScore} puan`,
+          '',
+          ...list,
+        ].join('\n'));
+      } catch (e) { await tg.send(from.id, '❌ ' + e.message); }
+      return true;
+    }
+
+    case '/haberat':
+      await tg.send(from.id, 'Flaş haber yayınlanıyor…');
+      try {
+        const n = await publishBreakingNews();
+        await tg.send(from.id, n ? `✅ ${n} kanala yayınlandı` : 'ℹ️ Eşiği geçen yeni haber yok');
+      } catch (e) { await tg.send(from.id, '❌ ' + e.message); }
+      return true;
+
     case '/egitim':
       await tg.send(from.id, 'Eğitim postu yayınlanıyor…');
       try {
@@ -296,6 +334,8 @@ async function adminCmd(cmd, args, from, ctx) {
       await publishWeekly(); await tg.send(from.id, '✅ haftalık tablo denendi'); return true;
     case '/aylik':
       await publishMonthly(); await tg.send(from.id, '✅ aylık tablo denendi'); return true;
+    case '/haberozet':
+      await publishNewsDigest(); await tg.send(from.id, '✅ haber özeti denendi'); return true;
 
     case '/izleme': {
       if (!MARKET.watchlist.length) { await tg.send(from.id, 'İzleme listesi boş.'); return true; }

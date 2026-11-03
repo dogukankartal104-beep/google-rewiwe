@@ -9,7 +9,8 @@ import { resolveOpen } from './tracker.js';
 import {
   publishSignal, publishResult, publishPendingFree,
   publishDaily, publishDailyRecap, publishWeekly, publishMonthly,
-  publishEducation, snapshotChannels, dayKey,
+  publishEducation, snapshotChannels,
+  publishBreakingNews, publishNewsDigest, dayKey,
 } from './publisher.js';
 import { pollLoop } from './commands.js';
 import { startServer } from './server.js';
@@ -39,10 +40,18 @@ async function tick() {
   try { await runScan(); }
   catch (e) { err('tarama:', e.message); }
 
-  // 3) gecikmeli free teaser'ları yayınla
+  // 3) gecikmeli free vitrin
   try { await publishPendingFree(); }
-  catch (e) { warn('free teaser:', e.message); }
+  catch (e) { warn('free vitrin:', e.message); }
+
+  // 4) flaş haber kontrolü (kendi aralığıyla, her turda değil)
+  if (ENV.newsOn && Date.now() - lastNews > ENV.newsCheckMin * 60_000) {
+    lastNews = Date.now();
+    try { await publishBreakingNews(); }
+    catch (e) { warn('haber:', e.message); }
+  }
 }
+let lastNews = 0;
 
 /* Zamanlı işler. Her dakika kontrol edilir, her iş günde bir kez çalışır
    (posts tablosundaki tekillik garantisi sayesinde tekrar yayın olmaz). */
@@ -74,6 +83,9 @@ async function schedule() {
       const gun = Math.floor(Date.now() / 864e5);
       if (ENV.eduEveryDays <= 1 || gun % ENV.eduEveryDays === 0) await publishEducation();
     }
+
+    // günlük haber özeti
+    if (ENV.newsOn && h === ENV.newsDigestHour && mi < 5) await publishNewsDigest();
 
     // abone sayısı fotoğrafı — günde iki kez yeter (dashboard büyüme grafiği)
     if ((h === 9 || h === 21) && mi < 5) await snapshotChannels();
@@ -107,9 +119,12 @@ async function selftest() {
   log(miss.length ? `❌ eksik ayar: ${miss.join(', ')}` : '✅ zorunlu ayarlar tamam');
 
   if (db.dbReady()) {
-    try { await db.ping(); log('✅ Supabase bağlantısı çalışıyor'); }
-    catch (e) { log('❌ Supabase: ' + e.message); }
-  } else log('⚠️ Supabase ayarlı değil');
+    try {
+      await db.ping();
+      await db.migrate();
+      log('✅ Postgres bağlantısı çalışıyor, tablolar hazır');
+    } catch (e) { log('❌ Postgres: ' + e.message); }
+  } else log('⚠️ DATABASE_URL ayarlı değil — Railway\'de Postgres ekle');
 
   if (ENV.botToken) {
     try { const me = await tg.getMe(); log(`✅ Telegram botu: @${me.username}`); }
@@ -132,6 +147,19 @@ async function selftest() {
     log(`✅ Binance verisi: ${MARKET.tick.length} sembol · BTC 15m ${fmt(MARKET.btc15, 2)}% · rejim ${MARKET.reg?.label || '—'}`);
   } catch (e) { log('❌ Binance: ' + e.message); }
 
+  if (ENV.newsOn) {
+    try {
+      const news = await import('./news.js');
+      const items = await news.collect({ hours: 24 });
+      const kaynaklar = [...new Set(items.map((x) => x.source))];
+      if (items.length) {
+        log(`✅ Haber: ${items.length} başlık · çalışan kaynaklar: ${kaynaklar.join(', ')}`);
+        const top = items[0];
+        log(`   en yüksek puan ${top.score}: ${top.title.slice(0, 70)}`);
+      } else log('⚠️ Haber: hiç başlık alınamadı (kaynak adresleri NEWS_FEEDS ile değiştirilebilir)');
+    } catch (e) { log('❌ Haber: ' + e.message); }
+  }
+
   log('=== TEST BİTTİ ===');
 }
 
@@ -151,6 +179,12 @@ async function main() {
     err('Eksik zorunlu ayarlar: ' + miss.join(', '));
     err('Railway > Variables kısmından ekleyip yeniden deploy et.');
     if (!ENV.dryRun) process.exit(1);
+  }
+
+  // Veritabanı: tabloları bot kurar, elle SQL çalıştırmak gerekmez.
+  if (db.dbReady()) {
+    try { await db.migrate(); }
+    catch (e) { err('veritabanı kurulamadı: ' + e.message); }
   }
 
   startServer();
