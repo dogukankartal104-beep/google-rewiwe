@@ -13,6 +13,9 @@ const RISK = 'Not financial advice. Leveraged trading can lose your entire capit
 const RISK_TR = 'Yatırım tavsiyesi değildir. Kaldıraçlı işlem sermayenizin tamamını kaybettirebilir.';
 
 const sym = (s) => String(s || '').replace('USDT', '');
+// Telegram HTML mode: &, < and > in user/internet text must be escaped or the whole message is rejected
+const esc = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escAttr = (t) => esc(t).replace(/"/g, '&quot;');
 // account size reads better plain: $1,000 not $1.00K
 const acct = () => Number(CFG.acct).toLocaleString('en-US');
 const dirIcon = (d) => (d === 'L' ? '🟢 LONG' : '🔴 SHORT');
@@ -711,34 +714,55 @@ export function eduPost(lesson, { forFree = false, idx = null, total = null } = 
 /* ============================================================
    NEWS
    ============================================================ */
-export function newsFlash(item, ctx = {}) {
+/* One story, two products.
+   VIP gets the "desk view": how to trade around it, the live market state, the coins it names
+   and our open book. Free gets the story and why it matters, and a pointer to VIP.
+   Everything in the desk view comes from live data or from general rules that match what the
+   system actually does — nothing is predicted. */
+export function newsFlash(item, ctx = {}, { forFree = false } = {}) {
+  const ageMin = Math.max(0, (Date.now() - item.at) / 60000);
+  const label = ageMin <= 45 ? '🚨 <b>BREAKING</b>' : '📰 <b>NEWS</b>';
   const lines = [];
-  const ago = dur(Date.now() - item.at);
-  lines.push(`🚨 <b>BREAKING</b>${item.tags?.length ? ` · ${item.tags[0]}` : ''}`);
+  lines.push(`${label}${item.tags?.length ? ` · ${esc(item.tags[0])}` : ''}`);
   lines.push('');
-  lines.push(`<b>${item.title}</b>`);
-  lines.push(`<i>${item.source} · ${ago} ago</i>`);
-  if (item.url) lines.push(`<a href="${item.url}">read the story →</a>`);
+  lines.push(`<b>${esc(item.title)}</b>`);
+  lines.push(`<i>${esc(item.source)} · ${dur(Date.now() - item.at)} ago</i>`);
+  if (item.url) lines.push(`<a href="${escAttr(item.url)}">read the story →</a>`);
   lines.push('');
-
   if (item.why) {
     lines.push('<b>Why it matters</b>');
-    lines.push(item.why);
+    lines.push(esc(item.why));
     lines.push('');
   }
 
-  const d = [];
-  if (ctx.btc15 != null) d.push(`BTC 15m <b>${pct(ctx.btc15)}</b>`);
-  if (ctx.rejim) d.push(regimeEn(ctx.rejim));
-  if (ctx.shock != null && ctx.shock > 2.5) d.push(`⚡ shock ${fmt(ctx.shock, 1)}× ATR`);
-  if (d.length) {
-    lines.push('<b>Market right now</b>');
-    lines.push(d.join(' · '));
-    if (ctx.shock > 2.5) {
-      lines.push('The system is <b>opening no new positions</b> — in a shock move the technical structure is not reliable.');
-    } else if (ctx.openN) {
-      lines.push(`${ctx.openN} open position(s) being tracked.`);
+  if (!forFree) {
+    lines.push('<b>Desk view</b>');
+    if (item.tip) lines.push(`• ${esc(item.tip)}`);
+
+    const mk = [];
+    if (ctx.btc15 != null) mk.push(`BTC 15m ${pct(ctx.btc15)}`);
+    if (ctx.rejim) mk.push(regimeEn(ctx.rejim));
+    if (ctx.shock != null) mk.push(`shock ${fmt(ctx.shock, 1)}× ATR ${ctx.shock > 2.5 ? '⚠️' : '✓ calm'}`);
+    if (mk.length) lines.push(`• Market: ${mk.join(' · ')}`);
+
+    if (ctx.coins?.length) {
+      lines.push('• Named in the story: ' + ctx.coins
+        .map((c) => `${esc(c.base)} ${pct(c.chg)} (24h)${c.watch ? ' · on our watchlist' : ''}`).join(' · '));
     }
+    if (ctx.open?.length) {
+      lines.push('• Open book: ' + ctx.open.slice(0, 3)
+        .map((o) => `${sym(o.symbol)} ${o.dir === 'L' ? '▲' : '▼'} ${o.open_r > 0 ? '+' : ''}${fmt(o.open_r, 2)}R`).join(' · '));
+    }
+    const macroRed = ctx.macro?.lvl === 'kırmızı';
+    lines.push('• System stance: ' + (
+      macroRed ? 'inside a macro window — no new positions until it passes.'
+        : ctx.shock > 2.5 ? 'BTC is in shock — no new positions, the structure is not reliable.'
+          : 'normal operation. A headline changes no rule; a setup still needs all three phases.'));
+    lines.push('');
+  } else {
+    lines.push(ctx.vipAgoMs != null
+      ? `VIP members saw this ${dur(ctx.vipAgoMs)} ago, with the desk view: how to trade around it, the live market state and our open book ⤵️`
+      : 'VIP members get the desk view with every story: how to trade around it, the live market state and our open book ⤵️');
     lines.push('');
   }
 
@@ -747,21 +771,25 @@ export function newsFlash(item, ctx = {}) {
     lines.push('');
   }
   lines.push(`<i>${RISK}</i>`);
-  return { text: lines.join('\n') };
+  return forFree
+    ? { text: lines.join('\n'), reply_markup: vipBtn('news') }
+    : { text: lines.join('\n') };
 }
 
-export function newsDigest(items, ctx = {}) {
+export function newsDigest(items, ctx = {}, { forFree = false } = {}) {
   const lines = [];
   lines.push(`📰 <b>TODAY IN CRYPTO</b> · ${trShort(Date.now())}`);
   lines.push('');
   if (!items.length) {
-    lines.push('Nothing market-moving surfaced today.');
-    lines.push('A quiet day is not a bad day — the system keeps waiting for a setup.');
+    lines.push(ctx.flashToday
+      ? 'The big story of the day was covered above — nothing else moved the market.'
+      : 'Nothing market-moving surfaced today. A quiet day is not a bad day — the system keeps waiting for a setup.');
+    lines.push('');
   } else {
     items.forEach((it, i) => {
-      lines.push(`<b>${i + 1}.</b> ${it.title}`);
-      lines.push(`<i>${it.source}${it.tags?.length ? ' · ' + it.tags.join(', ') : ''}</i>`);
-      if (it.url) lines.push(`<a href="${it.url}">read →</a>`);
+      lines.push(`<b>${i + 1}.</b> ${esc(it.title)}`);
+      lines.push(`<i>${esc(it.source)}${it.tags?.length ? ' · ' + esc(it.tags.join(', ')) : ''}</i>`);
+      if (it.url) lines.push(`<a href="${escAttr(it.url)}">read →</a>`);
       lines.push('');
     });
   }
@@ -773,8 +801,19 @@ export function newsDigest(items, ctx = {}) {
     lines.push('<b>Market state:</b> ' + d.join(' · '));
     lines.push('');
   }
+  if (!forFree && items[0]?.tip) {
+    lines.push('<b>Desk view</b>');
+    lines.push(`• ${esc(items[0].tip)}`);
+    lines.push('');
+  }
+  if (forFree) {
+    lines.push('VIP gets the desk view on every story — how to trade around it, and what our open book is doing ⤵️');
+    lines.push('');
+  }
   lines.push(`<i>${RISK}</i>`);
-  return { text: lines.join('\n') };
+  return forFree
+    ? { text: lines.join('\n'), reply_markup: vipBtn('news') }
+    : { text: lines.join('\n') };
 }
 
 // kept for backward compatibility with older imports

@@ -63,11 +63,14 @@ export async function send(chatId, text, opts = {}) {
   const gap = MIN_GAP - (Date.now() - lastSend);
   if (gap > 0) await sleep(gap);
   lastSend = Date.now();
+  // Paid content: stop members forwarding or saving it into free groups.
+  const protect = ENV.vipProtect && ENV.vipChat && String(chatId) === String(ENV.vipChat);
   return call('sendMessage', {
     chat_id: chatId,
     text,
     parse_mode: 'HTML',
     link_preview_options: { is_disabled: true },
+    ...(protect ? { protect_content: true } : {}),
     ...opts,
   });
 }

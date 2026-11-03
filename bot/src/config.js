@@ -102,11 +102,18 @@ export const ENV = {
   newsOn: bool('NEWS_ON', true),
   newsMinScore: Number(str('NEWS_MIN_SCORE', '38')),  // bu puanın üstü "flaş haber"
   newsCheckMin: Number(str('NEWS_CHECK_MIN', '20')),  // kaç dakikada bir bakılsın
-  newsMaxPerDay: Number(str('NEWS_MAX_PER_DAY', '4')),// günde en fazla kaç flaş haber
+  newsMaxPerDay: Number(str('NEWS_MAX_PER_DAY', '3')),     // VIP: at most this many flash stories a day
+  newsBreakingMin: Number(str('NEWS_BREAKING_MINUTES', '90')), // a flash story must be younger than this
+  newsTagCooldownH: Number(str('NEWS_TAG_COOLDOWN_H', '6')),   // same topic (e.g. SECURITY) at most once per this many hours
+  // The free channel gets far less: only big stories, one a day at most, and later than VIP
+  newsFreeMinScore: Number(str('NEWS_FREE_MIN_SCORE', '70')),
+  newsFreeMaxPerDay: Number(str('NEWS_FREE_MAX_PER_DAY', '1')),
+  newsFreeDelayMin: Number(str('NEWS_FREE_DELAY_MIN', '20')),
   newsDigestHour: Number(str('NEWS_DIGEST_HOUR', '19')), // günlük haber özeti saati
 
   // --- yenileme / marka ---
   renewDiscountPct: Number(str('RENEW_DISCOUNT_PCT', '0')),  // returning members' discount, 0 = off
+  vipProtect: bool('VIP_PROTECT_CONTENT', true),            // VIP posts cannot be forwarded or saved
   brandAuto: bool('BRAND_AUTO', true),                       // apply channel branding once per version
   brandFreeTitle: str('BRAND_FREE_TITLE', 'Crypto Pump Radar'),
   brandVipTitle: str('BRAND_VIP_TITLE', 'Crypto Pump Radar · VIP'),
@@ -138,7 +145,7 @@ export const ENV = {
   // --- fiyatlandırma ---
   plans: (() => {
     // PLANS="1ay:49,3ay:129,12ay:399"  (USD)
-    const raw = str('PLANS', '1ay:49:30,3ay:129:90,12ay:399:365');
+    const raw = str('PLANS', '1mo:49:30,3mo:129:90,12mo:399:365');
     return raw.split(',').map((p) => {
       const [name, price, days] = p.split(':').map((x) => x.trim());
       return { name, price: Number(price), days: Number(days) };

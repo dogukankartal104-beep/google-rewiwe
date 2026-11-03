@@ -9,8 +9,22 @@ import * as tg from './telegram.js';
 import * as M from './messages.js';
 import { log, warn, trDateTime } from './util.js';
 
-export const planByName = (name) =>
-  ENV.plans.find((p) => p.name.toLowerCase() === String(name).toLowerCase()) || null;
+// Plans were first named in Turkish (1ay/3ay/12ay). Two invoices were created under those
+// names before the rename, so an old order that gets paid later must still resolve.
+const LEGACY_PLAN_NAMES = { '1ay': '1mo', '3ay': '3mo', '12ay': '12mo' };
+
+export const planByName = (name) => {
+  const n = String(name).toLowerCase();
+  const want = LEGACY_PLAN_NAMES[n] || n;
+  return ENV.plans.find((p) => p.name.toLowerCase() === want) || null;
+};
+
+// A plan whose name starts with "_" (e.g. "_test:2:1") is hidden: only admins see and can buy it.
+// It exists so the real payment flow can be tested end to end with a small amount.
+export const isHiddenPlan = (p) => String(p?.name || '').startsWith('_');
+export const plansFor = (userId) =>
+  (tg.isAdmin(userId) ? ENV.plans : ENV.plans.filter((p) => !isHiddenPlan(p)));
+export const publicPlans = () => ENV.plans.filter((p) => !isHiddenPlan(p));
 
 /* Create a fresh single-use invite for one member. The previous link we issued
    to that member (if any) is revoked so only one link is ever live per person. */
@@ -109,7 +123,7 @@ export function shouldRemoveJoiner({
 export async function sweep() {
   const out = { kicked: 0, reminded: 0, winback: 0 };
   if (!ENV.vipChat) return out;
-  const renewKb = () => ({ reply_markup: M.planKeyboard(ENV.plans) });
+  const renewKb = () => ({ reply_markup: M.planKeyboard(publicPlans()) });
 
   // 1) expired memberships
   let expired = [];

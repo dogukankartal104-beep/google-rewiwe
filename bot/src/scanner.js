@@ -12,6 +12,7 @@ import { collectTape } from './tape.js';
 import { pool, log, warn, err, fmt, pct, decFor, seans } from './util.js';
 import * as db from './db.js';
 import { riskGate } from './tracker.js';
+import { macroRisk } from './macro.js';
 
 // Piyasa bağlamı — tarama turları arasında paylaşılır
 export const MARKET = {
@@ -48,12 +49,12 @@ export async function refreshMarket() {
   return MARKET;
 }
 
-function baseCtx() {
+export function baseCtx() {
   return {
     market: MARKET.breadth,
     dvol: MARKET.dvol,
     shock: MARKET.shock,
-    macro: null,       // makro takvim bağlanırsa buraya
+    macro: macroRisk(),   // inside a macro window decide() vetoes every new position
   };
 }
 

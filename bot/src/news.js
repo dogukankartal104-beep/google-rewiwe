@@ -107,6 +107,22 @@ const RULES = [
     why: 'Sharp moves are what create the exhaustion setups the system hunts — but all three phases must confirm first.' },
 ];
 
+/* "How to trade around it" — one short, honest line per topic, shown in VIP only.
+   These are general rules of thumb that match how the system behaves, not predictions. */
+export const TIPS = {
+  SECURITY: 'Do not trade the first spike. Wait for the book to refill. If your funds sit on the named venue, that is a withdrawal question, not a chart question.',
+  INSOLVENCY: 'Contagion moves fast and reverses fast. Cut size, widen stops — correlations go to 1.',
+  LIQUIDATION: 'A liquidation wave is fuel being burned. Fades work after open interest stops falling, not while it is still dropping.',
+  REGULATION: 'Headline risk resolves in hours, structure in days. No fresh fades into the first 30 minutes.',
+  ETF: 'Flows hit spot demand directly. Check whether the move is spot-driven before fading it.',
+  MACRO: 'Spreads and slippage are at their worst inside the release window. The system opens no new positions then — do the same.',
+  EXCHANGE: 'Listing pumps are the classic fade trap, but never fade the first candle. Wait for volume decay, OI bleed and a trigger.',
+  WHALE: 'A transfer is not a sale. Look for the order-book footprint before acting on it.',
+  NETWORK: 'Unlock dates are known in advance and mostly priced in. The risk is crowded longs into the date.',
+  FRAUD: 'Skip it. Fraud coins have no floor.',
+  MARKET: 'Sharp moves create the exhaustion setups we hunt — but all three phases still have to confirm.',
+};
+
 const BIG = /\b(bitcoin|btc|ethereum|eth|binance|coinbase|tether|usdt|solana|xrp)\b/i;
 
 export function scoreItem(title, { lang = 'tr' } = {}) {
@@ -123,7 +139,7 @@ export function scoreItem(title, { lang = 'tr' } = {}) {
   }
   if (score && BIG.test(t)) score += 10;      // büyük isim geçiyorsa daha çok ilgi görür
   if (lang === 'en') score -= 8;              // Türkçe kaynak tercih edilir
-  return { score, tags, why };
+  return { score, tags, why, tip: TIPS[tags[0]] || null };
 }
 
 /* ---------------- RSS AYRIŞTIRMA (bağımlılıksız) ---------------- */
@@ -214,19 +230,80 @@ export async function collect({ hours = 6 } = {}) {
   return out;
 }
 
-/* Eşiği geçen, daha önce yayınlanmamış en iyi haberi bul. */
-export async function pickBreaking(minScore = ENV.newsMinScore) {
-  /* "BREAKING" must actually be breaking. A 5-hour-old story posted as
-     breaking news reads badly, so the window here is deliberately short —
-     older items still reach the evening digest. */
-  const items = await collect({ hours: Number(process.env.NEWS_BREAKING_HOURS || 3) });
+/* ---------------- de-duplication ----------------
+   Several outlets cover the same event with different headlines, so the same
+   saga must not be posted four times. A story is a duplicate when its uid was
+   already posted, when its headline is largely the same as a recent one, or
+   when the same topic (for example SECURITY) was already posted lately. */
+const STOP = new Set(('the and for with that this from have has had will was were are been after before over into about than ' +
+  'then them they their its his her who how why what when where which while also just more most some such only very ' +
+  'için ile ve bir bu şu daha çok sonra önce kadar gibi olan oldu olarak ama fakat veya yeni son dakika nasıl neden hangi nedir ilk kez').split(' '));
+
+// word stems: lowercase, accents removed, first 6 letters ("saldırısının" and "saldırı" meet)
+export function tokens(title) {
+  const words = String(title || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+    .split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4 && !STOP.has(w));
+  return new Set(words.map((w) => w.slice(0, 6)));
+}
+
+// overlap coefficient of the two stem sets; 0 when either headline is too short to compare
+export function similarity(a, b) {
+  const ta = tokens(a), tb = tokens(b);
+  if (Math.min(ta.size, tb.size) < 3) return 0;
+  let inter = 0;
+  for (const w of ta) if (tb.has(w)) inter++;
+  return inter / Math.min(ta.size, tb.size);
+}
+
+export function isDuplicate(item, recentRows, { cooldownMs = 6 * 3600e3, now = Date.now(), threshold = 0.5 } = {}) {
+  for (const r of recentRows || []) {
+    if (r.uid === item.uid || r.uid === item.uid + '-f') return { dup: true, why: 'same story' };
+    if (similarity(item.title, r.title) >= threshold) return { dup: true, why: 'similar headline' };
+    const topic = String(r.tags || '').split(',')[0];
+    if (topic && item.tags?.[0] === topic && now - Date.parse(r.posted_at) < cooldownMs) {
+      return { dup: true, why: `${topic} already covered recently` };
+    }
+  }
+  return { dup: false };
+}
+
+/* Best fresh, non-duplicate story above the threshold. `items` is sorted by score. */
+export function pickFlash(items, recentRows, { minScore, maxAgeMs, cooldownMs, now = Date.now() } = {}) {
   for (const it of items) {
-    if (it.score < minScore) break;        // sıralı, gerisi daha düşük
-    try { if (await db.newsSeen(it.uid)) continue; }
-    catch { /* db yoksa yine de yayınla */ }
+    if (it.score < minScore) break;
+    if (maxAgeMs && now - it.at > maxAgeMs) continue;
+    if (isDuplicate(it, recentRows, { cooldownMs, now }).dup) continue;
     return it;
   }
   return null;
+}
+
+/* ---------------- coins named in a headline ---------------- */
+const NAMES = {
+  bitcoin: 'BTC', ethereum: 'ETH', binance: 'BNB', solana: 'SOL', ripple: 'XRP', dogecoin: 'DOGE',
+  cardano: 'ADA', toncoin: 'TON', avalanche: 'AVAX', chainlink: 'LINK', polkadot: 'DOT', litecoin: 'LTC',
+};
+// uppercase words that look like tickers but are not coins we trade
+const NOT_COINS = new Set(['SEC', 'ETF', 'CEO', 'USD', 'FED', 'CPI', 'NFT', 'DEX', 'API', 'ATH', 'SAFU', 'USA', 'TRY',
+  'EUR', 'ABD', 'FOMC', 'NFP', 'DAO', 'CZ', 'IRS', 'DOJ', 'FBI', 'UK', 'EU', 'AI', 'IPO', 'GDP', 'PCE', 'FTX']);
+
+/* Coins we actually trade that the headline mentions, with their 24h move.
+   `tick` is the live ticker list [{s, c}], `watch` the set of watched symbols. */
+export function mentionedCoins(title, tick = [], watch = new Set(), max = 3) {
+  const text = String(title || '');
+  const found = new Set();
+  for (const m of text.matchAll(/\b[A-Z]{2,10}\b/g)) if (!NOT_COINS.has(m[0])) found.add(m[0]);
+  for (const [name, base] of Object.entries(NAMES)) {
+    if (new RegExp(`(?<![\\p{L}\\p{N}])${name}`, 'iu').test(text)) found.add(base);
+  }
+  const bySymbol = new Map(tick.map((x) => [x.s, x]));
+  const out = [];
+  for (const base of found) {
+    const t = bySymbol.get(base + 'USDT');
+    if (t) out.push({ base, symbol: base + 'USDT', chg: t.c, watch: watch.has(base + 'USDT') });
+    if (out.length >= max) break;
+  }
+  return out;
 }
 
 /* Günlük özet için: eşiği geçmeyen ama ilgi çekici haberler. */

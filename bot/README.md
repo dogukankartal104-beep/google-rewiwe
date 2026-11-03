@@ -481,3 +481,54 @@ kavramlar üzerine — ve hepsi aynı kalıpta değil:
 
 Günde 1 ders ≈ 36 gün içerik. Sırayla gider, tekrar etmez.
 Bittiğinde bot log'a yazar; `lessons.js`'e yeni ders ekle, **id'leri değiştirme**.
+
+
+---
+
+## Security model
+
+**Who can reach VIP.** Only a single-use invite link that the bot creates for one paying member.
+There is no static VIP link anywhere (a test fails if one is ever wired back in). Every "Join VIP"
+button opens the *bot*, never an invite link. Anyone who joins VIP without an active membership is
+removed (for example a friend using a paying member's link), and VIP posts are sent with
+`protect_content` so they cannot be forwarded or saved.
+
+**Payments.** The IPN body is never trusted for money decisions; it only tells us a `payment_id`.
+The payment is re-fetched from NOWPayments with our own API key and *everything* (status, order,
+amount, currency) is read from that response. Access is granted at most once per order through an
+atomic database claim (`UPDATE ... WHERE credited=false`), so concurrent or repeated notifications
+cannot double-grant. The amount must cover the invoice. Underpaid, failed and reversed payments are
+never granted automatically; they alert the admins instead.
+
+**The public endpoints** (`/ipn/nowpayments`, `/go/vip`, `/dash`) are size-capped and rate-limited.
+Garbage requests are dropped quietly and never reach the admins; alerts only fire for things that
+involve a real payment, and each alert is throttled. The dashboard key is compared in constant time,
+a client is locked out after 10 wrong tries, and the page sets `Referrer-Policy: no-referrer` so the
+key in its URL cannot leak.
+
+**Secrets** live only in Railway variables. The repository and its full git history contain none.
+Treat `TELEGRAM_BOT_TOKEN`, `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET`, `DASHBOARD_KEY` and
+`DATABASE_URL` as passwords: if any of them was ever pasted into a chat or a screenshot, rotate it
+(BotFather `/revoke`, NOWPayments dashboard, a new random `DASHBOARD_KEY`).
+
+**Known limits.** A member can always screenshot a signal. The IPN signature algorithm has not yet
+been exercised with real NOWPayments traffic; the API re-check above is what protects payments, and
+the bot alerts you if a genuine payment arrives with a signature that does not verify. Run one
+end-to-end test purchase (see the hidden `_test` plan) before selling to real customers.
+
+## News: VIP and free are different products
+
+- **VIP** gets a fresh flash story (at most `NEWS_MAX_PER_DAY` a day) with a *desk view*: how to
+  trade around it, the live market state, the coins it names and the open book.
+- **Free** gets only big stories (`NEWS_FREE_MIN_SCORE`), at most one a day, `NEWS_FREE_DELAY_MIN`
+  minutes after VIP, without the desk view, with a pointer to VIP.
+- The same event is never posted twice: duplicates are caught by story id, headline similarity and
+  a per-topic cooldown (`NEWS_TAG_COOLDOWN_H`). A story older than `NEWS_BREAKING_MINUTES` is not
+  "breaking"; it waits for the evening digest.
+
+## Macro window
+
+The decision engine vetoes every new position inside a macro window (30 minutes before to 15 after a
+release). NFP is computed automatically (first Friday, 08:30 New York time with real DST rules); add
+FOMC, CPI and others with `MACRO_EVENTS`. A high-scoring macro headline also switches the veto on for
+30 minutes.

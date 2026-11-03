@@ -182,8 +182,11 @@ const item = {
   why: 'Exchange security incidents trigger a sudden flight of liquidity.',
 };
 
-test('newsFlash: başlık, kaynak, neden önemli ve piyasa durumu', () => {
-  const { text } = M.newsFlash(item, { btc15: -2.1, rejim: 'aşağı rejim', shock: 1.2, openN: 2 });
+test('newsFlash (VIP): headline, source, why it matters and the desk view', () => {
+  const { text } = M.newsFlash(item, {
+    btc15: -2.1, rejim: 'aşağı rejim', shock: 1.2,
+    open: [{ symbol: 'WIFUSDT', dir: 'S', open_r: 1.35 }, { symbol: 'PEPEUSDT', dir: 'L', open_r: -0.22 }],
+  });
   assert.match(text, /BREAKING/);
   assert.match(text, /SECURITY/);
   assert.match(text, /200 milyon dolar/);
@@ -191,7 +194,8 @@ test('newsFlash: başlık, kaynak, neden önemli ve piyasa durumu', () => {
   assert.match(text, /12m ago/);
   assert.match(text, /Why it matters/);
   assert.match(text, /-2\.10%/);
-  assert.match(text, /2 open position/);
+  assert.match(text, /Desk view/);
+  assert.match(text, /Open book: WIF ▼ \+1\.35R · PEPE ▲ -0\.22R/);
   assert.match(text, /Not financial advice/);
   assert.ok(!/undefined|NaN/.test(text));
 });

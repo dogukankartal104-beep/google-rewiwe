@@ -6,6 +6,7 @@ import * as tg from './telegram.js';
 import * as M from './messages.js';
 import { stats } from './tracker.js';
 import { MARKET } from './scanner.js';
+import { noteMacroNews, macroRisk } from './macro.js';
 import { activeCount } from './vip.js';
 import { gradeAtLeast } from './config.js';
 import { log, warn, trDate, trShort, trDayStart } from './util.js';
@@ -395,83 +396,168 @@ export async function snapshotChannels() {
   }
 }
 
-/* ---------------- 9) HABER ----------------
-   Flaş haber: eşiği geçen haberi HER İKİ kanala da anında atar.
-   Haber dökümü değil — sistemin o anki durumuyla ilişkilendirilir. */
-export async function publishBreakingNews() {
-  if (!ENV.newsOn) return 0;
-  const news = await import('./news.js');
+/* ---------------- 9) NEWS ----------------
+   VIP and free get DIFFERENT news products, and neither is a firehose:
 
-  // günlük tavan
+   • VIP  — a fresh flash story (at most NEWS_MAX_PER_DAY a day) with the "desk view": how to trade
+            around it, the live market state, the coins it names, and our open book.
+   • Free — only big stories (score >= NEWS_FREE_MIN_SCORE), at most NEWS_FREE_MAX_PER_DAY a day,
+            posted NEWS_FREE_DELAY_MIN minutes after VIP, without the desk view, with a pointer to VIP.
+
+   The same event is never posted twice: duplicates are caught by story id, by headline similarity
+   and by a per-topic cooldown (several outlets cover one hack with different headlines).
+   A story older than NEWS_BREAKING_MINUTES is not "breaking" and is left for the evening digest. */
+
+// posts made by this process, in case the database write after a successful send fails:
+// without this a failed log write would repost the same story every 20 minutes
+const POSTED_MEMORY = [];
+const remember = (row) => { POSTED_MEMORY.push(row); if (POSTED_MEMORY.length > 100) POSTED_MEMORY.shift(); };
+
+async function newsContext(item, news) {
+  const watch = new Set((MARKET.watchlist || []).map((w) => w.symbol));
+  let open = [];
   try {
-    const since = new Date(trDayStart()).toISOString();
-    const bugun = (await db.newsSince(since)) || [];
-    const flas = bugun.filter((x) => x.channel === 'free' || x.channel === 'vip');
-    const tekil = new Set(flas.map((x) => x.uid)).size;
-    if (tekil >= ENV.newsMaxPerDay) return 0;
-  } catch (e) { warn('haber kotası:', e.message); }
-
-  let item;
-  try { item = await news.pickBreaking(); }
-  catch (e) { warn('haber toplama:', e.message); return 0; }
-  if (!item) return 0;
-
-  const ctx = {
+    open = ((await db.openSignals()) || []).map((o) => ({ symbol: o.symbol, dir: o.dir, open_r: o.open_r ?? 0 }));
+  } catch { /* the desk view just omits the open book */ }
+  return {
     btc15: MARKET.btc15,
     shock: MARKET.shock,
     rejim: MARKET.reg?.label || null,
-    openN: null,
+    coins: item ? news.mentionedCoins(item.title, MARKET.tick, watch) : [],
+    open,
+    macro: macroRisk(),
   };
-  try { ctx.openN = ((await db.openSignals()) || []).length; } catch { /* yoksay */ }
+}
 
-  const { text } = M.newsFlash(item, ctx);
-  let n = 0;
-  for (const [channel, chatId, aktif] of [
-    ['vip', ENV.vipChat, ENV.postVip],
-    ['free', ENV.freeChat, ENV.postFree],
-  ]) {
-    if (!chatId || !aktif) continue;
-    try {
-      const msg = await tg.send(chatId, text);
-      if (kuru(msg)) { n++; continue; }
-      await db.newsAdd({
-        uid: item.uid + (channel === 'free' ? '-f' : ''),
-        title: item.title, url: item.url, source: item.source,
-        score: item.score, tags: (item.tags || []).join(','),
-        channel, message_id: msg?.message_id ?? null,
-      });
-      n++;
-    } catch (e) { warn(`haber (${channel}):`, e.message); }
+const rowsOf = (dbRows, channel, sinceMs) => dbRows
+  .concat(POSTED_MEMORY)
+  .filter((r) => r.channel === channel && Date.parse(r.posted_at) >= sinceMs)
+  // memory rows may duplicate database rows; keep one per uid
+  .filter((r, i, arr) => arr.findIndex((x) => x.uid === r.uid) === i);
+
+export async function publishBreakingNews() {
+  if (!ENV.newsOn) return 0;
+  const news = await import('./news.js');
+  const now = Date.now();
+
+  let items = [];
+  try { items = await news.collect({ hours: ENV.newsBreakingMin / 60 }); }
+  catch (e) { warn('news collection:', e.message); return 0; }
+
+  // a fresh, high-scoring macro headline switches the engine's macro-window veto on
+  for (const it of items) {
+    if (it.tags?.[0] === 'MACRO' && it.score >= ENV.newsMinScore && now - it.at <= 30 * 60e3) noteMacroNews(it.at);
   }
-  if (n) log(`flaş haber yayınlandı (${item.score}p): ${item.title.slice(0, 70)}`);
+
+  let logRows;
+  try { logRows = (await db.newsSince(new Date(now - 24 * 3600e3).toISOString())) || []; }
+  catch (e) { warn('news log unreadable — posting nothing rather than risk repeats:', e.message); return 0; }
+
+  const day0 = trDayStart();
+  const vipAll = rowsOf(logRows, 'vip', now - 24 * 3600e3);
+  const freeAll = rowsOf(logRows, 'free', now - 24 * 3600e3);
+  const vipToday = vipAll.filter((r) => Date.parse(r.posted_at) >= day0).length;
+  const freeToday = freeAll.filter((r) => Date.parse(r.posted_at) >= day0).length;
+  const cooldownMs = ENV.newsTagCooldownH * 3600e3;
+  let n = 0;
+
+  // ---------------- VIP ----------------
+  if (ENV.postVip && ENV.vipChat && vipToday < ENV.newsMaxPerDay) {
+    const item = news.pickFlash(items, vipAll, {
+      minScore: ENV.newsMinScore, maxAgeMs: ENV.newsBreakingMin * 60e3, cooldownMs, now,
+    });
+    if (item) {
+      try {
+        const { text } = M.newsFlash(item, await newsContext(item, news), { forFree: false });
+        const msg = await tg.send(ENV.vipChat, text);
+        if (!kuru(msg)) {
+          const row = {
+            uid: item.uid, title: item.title, url: item.url, source: item.source, score: item.score,
+            tags: (item.tags || []).join(','), channel: 'vip', message_id: msg?.message_id ?? null,
+            published_at: item.at, posted_at: new Date().toISOString(),
+          };
+          remember(row);
+          await db.newsAdd(row).catch((e) => warn('news log write failed (kept in memory):', e.message));
+        }
+        n++;
+        log(`news → VIP (${item.score}p): ${item.title.slice(0, 70)}`);
+      } catch (e) { warn('news → VIP:', e.message); }
+    }
+  }
+
+  // ---------------- FREE: later, rarer, shorter ----------------
+  if (ENV.postFree && ENV.freeChat && freeToday < ENV.newsFreeMaxPerDay) {
+    const cutoff = now - ENV.newsFreeDelayMin * 60e3;
+    const langOf = (src) => news.feeds().find((f) => f.name === src)?.lang || 'en';
+    const cand = vipAll
+      .filter((r) => r.score >= ENV.newsFreeMinScore
+        && Date.parse(r.posted_at) <= cutoff
+        && now - Date.parse(r.posted_at) <= 6 * 3600e3)
+      .sort((a, b) => b.score - a.score)
+      .find((r) => !news.isDuplicate(
+        { uid: r.uid, title: r.title, tags: String(r.tags || '').split(',') }, freeAll, { cooldownMs, now }).dup);
+
+    if (cand) {
+      const lang = langOf(cand.source);
+      const sc = news.scoreItem(cand.title, { lang });
+      const item = {
+        uid: cand.uid, title: cand.title, url: cand.url, source: cand.source, score: cand.score,
+        tags: String(cand.tags || '').split(',').filter(Boolean), lang, why: sc.why, tip: sc.tip,
+        at: cand.published_at ? Date.parse(cand.published_at) : Date.parse(cand.posted_at),
+      };
+      try {
+        const { text, reply_markup } = M.newsFlash(item, { vipAgoMs: now - Date.parse(cand.posted_at) }, { forFree: true });
+        const msg = await tg.send(ENV.freeChat, text, { reply_markup });
+        if (!kuru(msg)) {
+          const row = {
+            uid: cand.uid + '-f', title: cand.title, url: cand.url, source: cand.source, score: cand.score,
+            tags: String(cand.tags || ''), channel: 'free', message_id: msg?.message_id ?? null,
+            published_at: item.at, posted_at: new Date().toISOString(),
+          };
+          remember(row);
+          await db.newsAdd(row).catch((e) => warn('news log write failed (kept in memory):', e.message));
+        }
+        n++;
+        log(`news → free (${cand.score}p): ${cand.title.slice(0, 70)}`);
+      } catch (e) { warn('news → free:', e.message); }
+    }
+  }
   return n;
 }
 
-/* Günlük haber özeti — akşam, tek mesaj. */
+/* Evening digest: everything else that mattered, one message per channel.
+   Stories already posted as a flash that day are left out so it never repeats them. */
 export async function publishNewsDigest() {
   if (!ENV.newsOn) return 0;
   const key = dayKey();
   const news = await import('./news.js');
-  let items = [];
-  try { items = await news.digest(5); }
-  catch (e) { warn('haber özeti:', e.message); return 0; }
+  let all = [];
+  try { all = await news.digest(8); }
+  catch (e) { warn('news digest:', e.message); return 0; }
 
-  const ctx = { btc15: MARKET.btc15, rejim: MARKET.reg?.label, breadth: MARKET.breadth };
-  const { text } = M.newsDigest(items, ctx);
+  let logRows = [];
+  try { logRows = (await db.newsSince(new Date(Date.now() - 24 * 3600e3).toISOString())) || []; } catch { /* digest still works */ }
 
+  const base = await newsContext(null, news);
   let n = 0;
-  for (const [channel, chatId, aktif] of [
+  for (const [channel, chatId, enabled] of [
     ['free', ENV.freeChat, ENV.postFree],
     ['vip', ENV.vipChat, ENV.postVip],
   ]) {
-    if (!chatId || !aktif) continue;
+    if (!chatId || !enabled) continue;
     if (await db.postExists('news', channel, key)) continue;
+
+    const already = rowsOf(logRows, channel, Date.now() - 24 * 3600e3);
+    const items = all
+      .filter((it) => !news.isDuplicate(it, already, { cooldownMs: 0 }).dup)
+      .slice(0, 5);
+    const { text, reply_markup } = M.newsDigest(items, { ...base, flashToday: already.length > 0 }, { forFree: channel === 'free' });
     try {
-      const msg = await tg.send(chatId, text);
+      const msg = await tg.send(chatId, text, reply_markup ? { reply_markup } : {});
       if (!kuru(msg)) await db.postOnce('news', channel, key, msg?.message_id ?? null);
       n++;
-    } catch (e) { warn(`haber özeti (${channel}):`, e.message); }
+    } catch (e) { warn(`news digest (${channel}):`, e.message); }
   }
-  if (n) log(`haber özeti yayınlandı (${items.length} haber)`);
+  if (n) log(`news digest posted (${n} channel(s))`);
   return n;
 }

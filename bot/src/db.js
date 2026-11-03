@@ -151,6 +151,7 @@ const SCHEMA = [
     posted_at timestamptz not null default now()
   )`,
   `create index if not exists news_posted_idx on news_log (posted_at desc)`,
+  `alter table news_log add column if not exists published_at timestamptz`,
 ];
 
 export async function migrate() {
@@ -318,6 +319,19 @@ export async function payPatch(orderId, patch) {
     [orderId, ...vals]);
 }
 
+/* Atomic claim: only ONE caller can flip credited false -> true for an order.
+   Everything that grants VIP must go through this, so concurrent or repeated
+   payment notifications can never grant twice. Returns the row, or null if it
+   was already claimed. */
+export const payClaim = (orderId) =>
+  one(`update payments set credited=true, credited_at=now(), updated_at=now()
+       where order_id=$1 and credited=false returning *`, [orderId]);
+
+// give the claim back when the grant itself failed, so the next notification can retry
+export const payUnclaim = (orderId) =>
+  q(`update payments set credited=false, credited_at=null, updated_at=now()
+     where order_id=$1`, [orderId]);
+
 export const payRecent = (limit = 20) =>
   q('select * from payments order by created_at desc limit $1', [limit]);
 
@@ -402,10 +416,11 @@ export const newsSeen = (uid) =>
   q('select 1 from news_log where uid=$1 limit 1', [uid]).then((r) => r.length > 0);
 
 export const newsAdd = (row) =>
-  q(`insert into news_log (uid,title,url,source,score,tags,channel,message_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8)
+  q(`insert into news_log (uid,title,url,source,score,tags,channel,message_id,published_at)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
      on conflict (uid) do nothing returning id`,
-    [row.uid, row.title, row.url, row.source, row.score, row.tags, row.channel, row.message_id ?? null]);
+    [row.uid, row.title, row.url, row.source, row.score, row.tags, row.channel, row.message_id ?? null,
+      row.published_at ? new Date(row.published_at).toISOString() : null]);
 
 export const newsRecent = (limit = 30) =>
   q('select * from news_log order by posted_at desc limit $1', [limit]);

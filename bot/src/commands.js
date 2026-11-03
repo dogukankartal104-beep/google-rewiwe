@@ -6,12 +6,16 @@ import * as M from './messages.js';
 import * as np from './payments.js';
 import * as vip from './vip.js';
 import { applyBranding, reportText } from './brand.js';
+import { makeLimiter } from './ratelimit.js';
 import {
   perfLastDays, publishDaily, publishWeekly, publishMonthly,
   publishDailyRecap, publishEducation, publishBreakingNews, publishNewsDigest,
 } from './publisher.js';
 import { MARKET } from './scanner.js';
 import { fmt, log, warn, trDateTime, dur, trDayStart } from './util.js';
+
+// at most 6 payment pages per person per hour: keeps NOWPayments and the database clean
+const invoiceLimit = makeLimiter({ max: 6, windowMs: 3600e3 });
 
 let OFFSET = 0;
 let loaded = false;
@@ -108,7 +112,7 @@ async function handle(u, ctx) {
       const v = await db.vipGet(from.id).catch(() => null);
       const active = Boolean(v && v.status === 'aktif' && Date.parse(v.expires_at) > Date.now());
       if (!active) return tg.send(from.id, M.joinNoAccessMsg(lang),
-        { reply_markup: M.planKeyboard(ENV.plans) });
+        { reply_markup: M.planKeyboard(vip.publicPlans()) });
       try {
         const link = await vip.issueInvite(from.id, { previous: v.invite_link });
         await db.vipPatch(from.id, { invite_link: link });
@@ -176,7 +180,12 @@ async function onCallback(cq) {
   if (data.startsWith('buy:')) {
     const planName = data.slice(4);
     const plan = vip.planByName(planName);
-    if (!plan) { await tg.answerCb(cq.id, 'Plan not found'); return; }
+    if (!plan || (vip.isHiddenPlan(plan) && !tg.isAdmin(from.id))) {
+      await tg.answerCb(cq.id, 'Plan not found'); return;
+    }
+    if (!invoiceLimit(String(from.id))) {
+      await tg.answerCb(cq.id, 'Too many attempts — try again in a while'); return;
+    }
 
     if (!np.configured()) {
       await tg.answerCb(cq.id, 'Payment system not ready yet');
@@ -554,13 +563,14 @@ async function onMyChatMember(ev) {
    Members see their status plus the extend options; everyone else sees the pitch.
    ============================================================ */
 async function sendVipMenu(from, lang) {
-  if (!ENV.plans.length) {
+  const plans = vip.plansFor(from.id);
+  if (!plans.length) {
     return tg.send(from.id, M.L(lang, 'No plans configured yet.', 'Planlar henüz tanımlanmadı.'));
   }
   const v = await db.vipGet(from.id).catch(() => null);
   const active = Boolean(v && v.status === 'aktif' && Date.parse(v.expires_at) > Date.now());
-  const text = active ? M.vipActiveMsg(v, lang) : M.vipMsg(ENV.plans, lang);
-  return tg.send(from.id, text, { reply_markup: M.planKeyboard(ENV.plans) });
+  const text = active ? M.vipActiveMsg(v, lang) : M.vipMsg(plans, lang);
+  return tg.send(from.id, text, { reply_markup: M.planKeyboard(plans) });
 }
 
 /* ============================================================
@@ -603,7 +613,7 @@ async function onChatMember(ev) {
     await tg.kick(ENV.vipChat, userId);
     log(`paywall guard: removed unauthorised joiner ${userId}`);
     const lang = await db.getUserLang(userId);
-    tg.send(userId, M.unauthorizedJoinMsg(lang), { reply_markup: M.planKeyboard(ENV.plans) }).catch(() => {});
+    tg.send(userId, M.unauthorizedJoinMsg(lang), { reply_markup: M.planKeyboard(vip.publicPlans()) }).catch(() => {});
     const name = [ev.new_chat_member.user.first_name, ev.new_chat_member.user.username && '@' + ev.new_chat_member.user.username]
       .filter(Boolean).join(' ');
     await vip.notifyAdmins(`🛡 Removed an unauthorised joiner from VIP: <code>${userId}</code> ${tg.esc(name)}`);
