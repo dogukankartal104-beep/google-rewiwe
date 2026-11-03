@@ -112,9 +112,11 @@ const SCHEMA = [
 
   `create table if not exists bot_users (
     telegram_id bigint primary key, username text, first_name text,
+    lang text not null default 'en',
     last_seen timestamptz not null default now(),
     created_at timestamptz not null default now()
   )`,
+  `alter table bot_users add column if not exists lang text not null default 'en'`,
 
   `create table if not exists channel_stats (
     day date not null, channel text not null, members int,
@@ -338,6 +340,17 @@ export const userSeen = (u) =>
      on conflict (telegram_id) do update set
        username=excluded.username, first_name=excluded.first_name, last_seen=now()`,
     [u.id, u.username || null, u.first_name || null]).catch(() => {});
+
+/* Kullanıcının DM dili. Kanal içeriği her zaman İngilizce. */
+export const getUserLang = (tgId) =>
+  q('select lang from bot_users where telegram_id=$1', [tgId])
+    .then((r) => r[0]?.lang || 'en')
+    .catch(() => 'en');
+
+export const setUserLang = (tgId, lang) =>
+  q(`insert into bot_users (telegram_id, lang) values ($1,$2)
+     on conflict (telegram_id) do update set lang=excluded.lang`, [tgId, lang])
+    .catch(() => null);
 
 export const usersCount = () =>
   q('select count(*)::int as n from bot_users').then((r) => r[0]?.n || 0);

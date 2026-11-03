@@ -92,7 +92,7 @@ test('scoreItem: güvenlik olayı en yüksek puanı alır', () => {
   const nft = scoreItem('Yeni bir NFT koleksiyonu piyasaya çıktı');
   assert.ok(hack.score > 50, 'hack haberi yüksek puan almalı: ' + hack.score);
   assert.ok(hack.score > nft.score);
-  assert.ok(hack.tags.includes('GÜVENLİK'));
+  assert.ok(hack.tags.includes('SECURITY'));
   assert.ok(hack.why, 'neden önemli açıklaması olmalı');
 });
 
@@ -104,9 +104,9 @@ test('scoreItem: alakasız haber düşük/sıfır puan', () => {
 
 test('scoreItem: makro haberi yakalar', () => {
   const s = scoreItem('Fed faiz kararını açıkladı, Bitcoin sert hareketlendi');
-  assert.ok(s.tags.includes('MAKRO'));
+  assert.ok(s.tags.includes('MACRO'));
   assert.ok(s.score >= 35);
-  assert.match(s.why, /oynaklık/);
+  assert.match(s.why, /volatility/);
 });
 
 test('scoreItem: büyük isim geçiyorsa puan artar', () => {
@@ -178,34 +178,34 @@ const item = {
   at: Date.now() - 12 * 60_000,
   lang: 'tr',
   score: 70,
-  tags: ['GÜVENLİK'],
-  why: 'Borsa güvenlik olayları ani likidite kaçışı yaratır.',
+  tags: ['SECURITY'],
+  why: 'Exchange security incidents trigger a sudden flight of liquidity.',
 };
 
 test('newsFlash: başlık, kaynak, neden önemli ve piyasa durumu', () => {
   const { text } = M.newsFlash(item, { btc15: -2.1, rejim: 'aşağı rejim', shock: 1.2, openN: 2 });
-  assert.match(text, /ÖNEMLİ HABER/);
-  assert.match(text, /GÜVENLİK/);
+  assert.match(text, /BREAKING/);
+  assert.match(text, /SECURITY/);
   assert.match(text, /200 milyon dolar/);
   assert.match(text, /Kriptokoin/);
-  assert.match(text, /12 dk önce/);
-  assert.match(text, /Neden önemli/);
+  assert.match(text, /12m ago/);
+  assert.match(text, /Why it matters/);
   assert.match(text, /-2\.10%/);
-  assert.match(text, /2 açık pozisyon/);
-  assert.match(text, /Yatırım tavsiyesi değildir/);
+  assert.match(text, /2 open position/);
+  assert.match(text, /Not financial advice/);
   assert.ok(!/undefined|NaN/.test(text));
 });
 
 test('newsFlash: BTC şokunda "yeni pozisyon açmıyor" uyarısı', () => {
   const { text } = M.newsFlash(item, { btc15: -4.5, shock: 3.2, rejim: 'aşağı rejim' });
-  assert.match(text, /şok 3\.2×/);
-  assert.match(text, /yeni pozisyon açmıyor/);
+  assert.match(text, /shock 3\.2×/);
+  assert.match(text, /no new positions/);
 });
 
-test('newsFlash: İngilizce başlıkta çeviri uydurulmadığı belirtilir', () => {
-  const { text } = M.newsFlash({ ...item, lang: 'en', title: 'SEC sues major exchange' }, {});
-  assert.match(text, /SEC sues major exchange/);
-  assert.match(text, /özgün dilinde/);
+test('newsFlash: a non-English headline is kept in its source language', () => {
+  const { text } = M.newsFlash({ ...item, lang: 'tr', title: 'SEC borsaya dava açtı' }, {});
+  assert.match(text, /SEC borsaya dava açtı/);
+  assert.match(text, /source language/);
 });
 
 test('newsFlash: eksik bağlamda çökmez', () => {
@@ -217,7 +217,7 @@ test('newsFlash: eksik bağlamda çökmez', () => {
 test('newsDigest: haberleri numaralı listeler', () => {
   const { text } = M.newsDigest([item, { ...item, title: 'İkinci haber' }],
     { btc15: 0.4, rejim: 'yatay', breadth: { up: 18, dn: 7 } });
-  assert.match(text, /GÜNDEM/);
+  assert.match(text, /TODAY IN CRYPTO/);
   assert.match(text, /1\./);
   assert.match(text, /2\./);
   assert.match(text, /İkinci haber/);
@@ -227,7 +227,7 @@ test('newsDigest: haberleri numaralı listeler', () => {
 
 test('newsDigest: haber yoksa uydurmaz', () => {
   const { text } = M.newsDigest([], {});
-  assert.match(text, /öne çıkan bir gelişme yakalanmadı/);
+  assert.match(text, /Nothing market-moving/);
   assert.ok(!/1\./.test(text));
 });
 
@@ -236,18 +236,18 @@ test('likidasyon kuralı kelime sırasından bağımsız', () => {
   // "1.2 milyar ... likidasyon" ve "likidasyon ... rekor" ikisi de yakalanmalı
   const a = scoreItem('Son 24 saatte 1.2 milyar dolarlık likidasyon yaşandı');
   const b = scoreItem('Likidasyon dalgası rekor kırdı');
-  assert.ok(a.tags.includes('LİKİDASYON'), 'milyar önce gelse de yakalanmalı');
-  assert.ok(b.tags.includes('LİKİDASYON'), 'rekor sonra gelse de yakalanmalı');
+  assert.ok(a.tags.includes('LIQUIDATION'), 'milyar önce gelse de yakalanmalı');
+  assert.ok(b.tags.includes('LIQUIDATION'), 'rekor sonra gelse de yakalanmalı');
   assert.ok(a.score >= 40 && b.score >= 40);
   // sadece "likidasyon" geçip büyüklük belirtmeyen haber eşiği geçmemeli
-  assert.ok(!scoreItem('Likidasyon nedir? Rehber').tags.includes('LİKİDASYON'));
+  assert.ok(!scoreItem('Likidasyon nedir? Rehber').tags.includes('LIQUIDATION'));
 });
 
 test('balina kuralı sıra bağımsız ama tek başına flaş değil', () => {
   const a = scoreItem('Balina 500 milyon dolarlık BTC taşıdı');
   const b = scoreItem('500 milyon dolar transfer edildi');
-  assert.ok(a.tags.includes('BALİNA'));
-  assert.ok(b.tags.includes('BALİNA'), 'transfer + büyüklük sırası önemsiz');
+  assert.ok(a.tags.includes('WHALE'));
+  assert.ok(b.tags.includes('WHALE'), 'transfer + büyüklük sırası önemsiz');
   assert.ok(a.score < 38, 'balina haberi tek başına flaş olmamalı: ' + a.score);
 });
 
@@ -256,19 +256,19 @@ test('Fed/FOMC haberi flaş eşiğini geçer', () => {
     .forEach((t) => {
       const s = scoreItem(t);
       assert.ok(s.score >= 38, `"${t}" flaş olmalı: ${s.score}`);
-      assert.ok(s.tags.includes('MAKRO'));
+      assert.ok(s.tags.includes('MACRO'));
     });
 });
 
 test('Türkçe karakterle başlayan terimler eşleşir (regresyon)', () => {
   // JavaScript'te \b Türkçe harfleri tanımaz; bu yüzden Unicode sınırı kullanılıyor.
   const kelimeler = {
-    'Fonlar çalındı': 'GÜVENLİK',
-    'Borsaya siber saldırı düzenlendi': 'GÜVENLİK',
-    'Şirket çöktü': 'İFLAS',
-    'Ağda güncelleme yapıldı': 'AĞ',
-    'Piyasada sert düşüş': 'PİYASA',
-    'Büyük dolandırıcılık iddiası': 'RUG',
+    'Fonlar çalındı': 'SECURITY',
+    'Borsaya siber saldırı düzenlendi': 'SECURITY',
+    'Şirket çöktü': 'INSOLVENCY',
+    'Ağda güncelleme yapıldı': 'NETWORK',
+    'Piyasada sert düşüş': 'MARKET',
+    'Büyük dolandırıcılık iddiası': 'FRAUD',
   };
   for (const [t, tag] of Object.entries(kelimeler)) {
     assert.ok(scoreItem(t).tags.includes(tag), `"${t}" -> ${tag} bekleniyordu`);

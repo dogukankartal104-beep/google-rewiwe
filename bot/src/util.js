@@ -44,7 +44,7 @@ export async function pool(items, n, fn) {
 // TR saatine göre seans. HUD ile birebir aynı eşikler.
 export function seans(t = Date.now()) {
   const h = new Date(t + TZ_OFFSET * 3600e3).getUTCHours();
-  return h < 3 ? 'ölü saat' : h < 11 ? 'asya' : h < 17 ? 'avrupa' : 'abd';
+  return h < 3 ? 'dead hours' : h < 11 ? 'Asia' : h < 17 ? 'Europe' : 'US';
 }
 
 export function trDate(t = Date.now()) {
@@ -57,10 +57,11 @@ export function trDayStart(t = Date.now()) {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) - TZ_OFFSET * 3600e3;
 }
 
-const AYLAR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+// Channel content is English, so month labels are English too.
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 export function trShort(t) {
   const d = trDate(t);
-  return `${d.getUTCDate()} ${AYLAR[d.getUTCMonth()]}`;
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`;
 }
 export function trDateTime(t) {
   const d = trDate(t);
@@ -73,14 +74,14 @@ export function trClock(t) {
   return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
 
-// Süreyi insan diline çevir: 134 -> "2 sa 14 dk"
+// Human-readable duration: 134 min -> "2h 14m"
 export function dur(ms) {
   const m = Math.max(0, Math.round(ms / 60000));
-  if (m < 60) return m + ' dk';
+  if (m < 60) return m + 'm';
   const h = Math.floor(m / 60), r = m % 60;
-  if (h < 24) return r ? `${h} sa ${r} dk` : `${h} sa`;
-  const g = Math.floor(h / 24);
-  return `${g} gün ${h % 24} sa`;
+  if (h < 24) return r ? `${h}h ${r}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
 }
 
 export function log(...a) {

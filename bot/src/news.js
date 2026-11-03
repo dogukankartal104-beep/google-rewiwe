@@ -48,63 +48,63 @@ const W = (...terms) =>
 
 const RULES = [
   // --- kritik: ani likidite olayları ---
-  { p: 50, tag: 'GÜVENLİK',
+  { p: 50, tag: 'SECURITY',
     re: W('hack', 'hackle', 'hacked', 'exploit', 'istismar', 'saldır', 'breach',
       'ihlal', 'çalın', 'çalınd', 'stolen', 'drain', 'güvenlik açığ', 'siber'),
-    why: 'Borsa veya protokol güvenlik olayları ani likidite kaçışı yaratır. Defter incelir, kayma artar, stoplar beklenmedik yerde çalışır.' },
-  { p: 45, tag: 'İFLAS',
+    why: 'Exchange and protocol security incidents trigger a sudden flight of liquidity. The book thins out, slippage jumps, and stops fire in places you did not expect.' },
+  { p: 45, tag: 'INSOLVENCY',
     re: W('iflas', 'bankrupt', 'insolven', 'çöktü', 'collapse', 'battı', 'batti',
       'halted withdrawal', 'çekim durdur', 'çekimleri durdur', 'konkordato'),
-    why: 'Bir kurumun çökmesi zincirleme likidasyon başlatır. Böyle anlarda teknik yapı anlamını yitirir.' },
-  { p: 42, tag: 'LİKİDASYON',
+    why: 'An institution failing sets off chain liquidations. In moments like this, technical structure stops meaning anything.' },
+  { p: 42, tag: 'LIQUIDATION',
     // sıra bağımsız: "1.2 milyar dolarlık likidasyon" da "likidasyon 1.2 milyar" da yakalanmalı
     re: {
       test: (t) => /(?<![\p{L}\p{N}])(likidasyon|liquidation|tasfiye)/iu.test(t)
         && /(?<![\p{L}\p{N}])(milyar|billion|milyon|million|rekor|record)/iu.test(t),
     },
-    why: 'Büyük likidasyon dalgası yakıtın bittiğini veya yeni başladığını gösterir — sistemin OI analiziyle doğrudan ilgili.' },
+    why: 'A large liquidation wave shows the fuel is either running out or just igniting — directly relevant to the system’s open-interest read.' },
 
   // --- düzenleme ---
-  { p: 38, tag: 'DÜZENLEME',
+  { p: 38, tag: 'REGULATION',
     re: W('SEC', 'CFTC', 'yasak', 'ban ', 'dava', 'lawsuit', 'soruşturma',
       'investigat', 'regülasyon', 'regulation', 'mahkeme', 'court', 'ceza', 'SPK'),
-    why: 'Düzenleyici haberler yön değiştirici olabilir; teknik kurulumları geçersiz kılar.' },
+    why: 'Regulatory news can flip direction outright and invalidate technical setups.' },
   { p: 36, tag: 'ETF', re: W('ETF'),
-    why: 'ETF akışları spot talebi doğrudan etkiler — sistemin "spot sürüklü mü" sorusuna bakar.' },
+    why: 'ETF flows move spot demand directly — it feeds the system’s "is this spot-driven?" question.' },
 
   // --- makro ---
-  { p: 40, tag: 'MAKRO',
+  { p: 40, tag: 'MACRO',
     re: W('FED', 'FOMC', 'faiz', 'interest rate', 'enflasyon', 'inflation',
       'CPI', 'NFP', 'istihdam', 'powell', 'tarım dışı'),
-    why: 'Makro veri anlarında oynaklık patlar ve korelasyon 1\'e yaklaşır. Sistem bu pencerede yeni pozisyon açmaz.' },
+    why: 'Around macro releases volatility explodes and correlations go to 1. The system opens no new positions in that window.' },
 
   // --- borsa / listeleme ---
-  { p: 30, tag: 'BORSA',
+  { p: 30, tag: 'EXCHANGE',
     re: W('delist', 'listeden çıkar', 'listeleme', 'listing', 'binance',
       'coinbase', 'okx', 'bybit', 'upbit', 'kraken'),
-    why: 'Listeleme ve çıkarma haberleri tek coinde sert, kısa ömürlü hareket yaratır — tipik fade tuzağı.' },
-  { p: 24, tag: 'BALİNA',
+    why: 'Listing and delisting news creates a violent, short-lived move in a single coin — a classic fade trap.' },
+  { p: 24, tag: 'WHALE',
     re: {
       test: (t) => /(?<![\p{L}\p{N}])(balina|whale)/iu.test(t)
         || (/(?<![\p{L}\p{N}])(transfer|moved|taşıd)/iu.test(t)
             && /(?<![\p{L}\p{N}])(milyar|billion|milyon|million)/iu.test(t)),
     },
-    why: 'Büyük transferler satış veya toplama hazırlığı olabilir; emir defterinde iz bırakır.' },
+    why: 'Large transfers can precede selling or accumulation, and they leave a trace in the order book.' },
 
   // --- ağ / proje ---
-  { p: 25, tag: 'AĞ',
+  { p: 25, tag: 'NETWORK',
     re: W('halving', 'yarılanma', 'hard fork', 'upgrade', 'güncelleme',
       'mainnet', 'airdrop', 'unlock', 'kilit açıl', 'token açılım'),
-    why: 'Arz tarafını değiştiren olaylar — özellikle token kilidi açılmaları — fiyatı günlerce baskılayabilir.' },
-  { p: 22, tag: 'RUG',
+    why: 'Events that change the supply side — token unlocks above all — can suppress price for days.' },
+  { p: 22, tag: 'FRAUD',
     re: W('rug ?pull', 'rugpull', 'dolandırıc', 'scam', 'ponzi', 'sahte', 'kayıplara karış'),
-    why: 'Dolandırıcılık haberleri o coinde kalıcı güven kaybı demektir; "ucuzladı" diye alınmaz.' },
+    why: 'Fraud news means permanent loss of trust in that coin. It is not a dip to buy.' },
 
   // --- genel piyasa ---
-  { p: 18, tag: 'PİYASA',
+  { p: 18, tag: 'MARKET',
     re: W('ATH', 'rekor', 'record high', 'çöküş', 'crash', 'ralli', 'rally',
       'sert düş', 'sert yüksel', 'plunge', 'soar', 'uçtu', 'dipten döndü'),
-    why: 'Sert hareketler sistemin aradığı tükenme kurulumlarını üretir — ama önce üç faz onayı gerekir.' },
+    why: 'Sharp moves are what create the exhaustion setups the system hunts — but all three phases must confirm first.' },
 ];
 
 const BIG = /\b(bitcoin|btc|ethereum|eth|binance|coinbase|tether|usdt|solana|xrp)\b/i;

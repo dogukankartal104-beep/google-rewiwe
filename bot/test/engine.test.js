@@ -644,18 +644,18 @@ test('fmt / pct / shortn: null güvenli ve beklenen biçim', () => {
 });
 
 test('dur: süreyi insan diline çevirir', () => {
-  assert.equal(dur(5 * 60_000), '5 dk');
-  assert.equal(dur(134 * 60_000), '2 sa 14 dk');
-  assert.equal(dur(120 * 60_000), '2 sa');
-  assert.match(dur(26 * 3600_000), /gün/);
+  assert.equal(dur(5 * 60_000), '5m');
+  assert.equal(dur(134 * 60_000), '2h 14m');
+  assert.equal(dur(120 * 60_000), '2h');
+  assert.match(dur(26 * 3600_000), /d /);
 });
 
 test('seans: TR saatine göre doğru seans', () => {
   const at = (hUtc) => seans(Date.UTC(2026, 0, 5, hUtc, 0, 0));
-  assert.equal(at(22), 'ölü saat');   // TR 01:00
-  assert.equal(at(5), 'asya');        // TR 08:00
-  assert.equal(at(11), 'avrupa');     // TR 14:00
-  assert.equal(at(16), 'abd');        // TR 19:00
+  assert.equal(at(22), 'dead hours'); // TR 01:00
+  assert.equal(at(5), 'Asia');        // TR 08:00
+  assert.equal(at(11), 'Europe');     // TR 14:00
+  assert.equal(at(16), 'US');         // TR 19:00
 });
 
 test('trDayStart: TR gün başlangıcı tutarlı', () => {

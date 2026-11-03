@@ -112,15 +112,15 @@ test('freeShowcase: fiyat sızdırmaz, yön ve R gösterir', () => {
     assert.ok(!text.includes(px), `fiyat sızdı: ${px}`);
   });
   assert.ok(!/R:R/.test(text), 'R:R sızmamalı');
-  assert.ok(!/Giriş/.test(text), 'giriş etiketi olmamalı');
+  assert.ok(!/Entry/.test(text), 'no entry label');
 
   // göstermesi gerekenler
-  assert.match(text, /KAZANAN POZİSYON/);
+  assert.match(text, /LIVE POSITION — IN PROFIT/);
   assert.match(text, /PEPE/);
   assert.match(text, /SHORT/);
   assert.match(text, /\+1\.35R/);
-  assert.match(text, /4\/5/, 'tükenme onayı');
-  assert.match(text, /Yatırım tavsiyesi değildir/);
+  assert.match(text, /4\/5/, 'exhaustion confirmations');
+  assert.match(text, /Not financial advice/);
   assert.ok(reply_markup?.inline_keyboard?.[0]?.[0]?.url, 'VIP butonu olmalı');
   assert.ok(!/undefined|NaN/.test(text));
 });
@@ -133,7 +133,7 @@ test('freeShowcase: LONG yönünde de doğru', () => {
 
 test('freeShowcase: "yön tek başına yetmez" argümanı var (dönüşüm mesajı)', () => {
   const { text } = M.freeShowcase(sig({ open_r: 1 }), 1);
-  assert.match(text, /nereden girip nerede çıkacağını/);
+  assert.match(text, /where to enter, where to stop/);
 });
 
 /* ======================= TAKİPLİ LİNK ======================= */
@@ -208,13 +208,13 @@ test('eduPost: free sürümünde VIP çağrısı var, VIP sürümünde yok', () 
   const vip = M.eduPost(l, { forFree: false });
   assert.ok(free.reply_markup, 'free\'de buton olmalı');
   assert.ok(!vip.reply_markup, 'VIP\'te buton olmamalı — üye zaten içeride');
-  assert.match(free.text, /7\/24/);
-  assert.ok(!/VIP'e katıl/.test(vip.text));
+  assert.match(free.text, /24\/7/);
+  assert.ok(!/Join VIP/.test(vip.text));
 });
 
 test('eduPost: ders numarası gösterilir', () => {
   const { text } = M.eduPost(LESSONS[0], { forFree: false, idx: 3, total: 25 });
-  assert.match(text, /ders 3\/25/);
+  assert.match(text, /lesson 3\/25/);
 });
 
 test('lessonById çalışır', () => {
@@ -224,9 +224,9 @@ test('lessonById çalışır', () => {
 
 test('dersler sistemin gerçek kavramlarını kapsıyor', () => {
   const hepsi = LESSONS.map((l) => l.id + ' ' + l.title + ' ' + l.body).join(' ').toLowerCase();
-  ['open interest', 'likidite süpürmesi', 'cvd', 'avwap', 'atr',
-    'poc', 'funding', 'likidasyon', 'pozisyon boyutu', 'stop',
-  ].forEach((k) => assert.ok(hepsi.includes(k), 'eksik konu: ' + k));
+  ['open interest', 'liquidity sweep', 'cvd', 'avwap', 'atr',
+    'poc', 'funding', 'liquidation', 'position size', 'stop',
+  ].forEach((k) => assert.ok(hepsi.includes(k), 'missing topic: ' + k));
 });
 
 /* ======================= DASHBOARD ======================= */

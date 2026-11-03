@@ -93,7 +93,7 @@ export function extras(m, side, ctx = {}) {
   add('piyasa rejimi', L ? 'toplu çöküş yok' : 'toplu pump yok',
     mk?.n ? (L ? mk.dn / mk.n <= 0.25 : mk.up / mk.n <= 0.25) : null,
     mk?.n ? mk.up + '↑/' + mk.dn + '↓' : '—');
-  add('seans', 'ölü saat değil', seans() !== 'ölü saat', seans());
+  add('session', 'not the dead hours', seans() !== 'dead hours', seans());
 
   const FH = ctx.fundHist || [];
   if (FH.length >= 2) {

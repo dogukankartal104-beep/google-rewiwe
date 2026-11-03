@@ -60,13 +60,13 @@ test('vipSignal: tüm plan alanlarını içerir ve HTML geçerli', () => {
   assert.match(s, /SHORT/);
   assert.match(s, /PEPE/);
   assert.ok(!/PEPEUSDT/.test(s), 'USDT eki sadeleştirilmeli');
-  assert.match(s, /Giriş/);
+  assert.match(s, /Entry/);
   assert.match(s, /Stop/);
   assert.match(s, /TP1/);
   assert.match(s, /TP2/);
   assert.match(s, /R:R/);
-  assert.match(s, /0\.00001234/, 'giriş fiyatı 8 basamakla yazılmalı');
-  assert.match(s, /Yatırım tavsiyesi değildir/, 'uyarı şart');
+  assert.match(s, /0\.00001234/, 'entry must print with 8 decimals');
+  assert.match(s, /Not financial advice/, 'disclaimer required');
 });
 
 test('vipSignal: TP2 yoksa o satır çıkmaz, çökmez', () => {
@@ -96,11 +96,11 @@ test('freeTeaser: plan fiyatlarını SIZDIRMAZ', () => {
   assert.ok(!text.includes('0.00001301'), 'stop free\'ye sızmamalı');
   assert.ok(!text.includes('0.00001156'), 'TP1 free\'ye sızmamalı');
   assert.ok(!text.includes('0.00001098'), 'TP2 free\'ye sızmamalı');
-  assert.ok(!/R:R/.test(text), 'R:R free\'ye sızmamalı');
+  assert.ok(!/R:R/.test(text), 'R:R must not leak to free');
   // ama değer göstermeli
   assert.match(text, /PEPE/);
   assert.match(text, /SHORT/);
-  assert.match(text, /Sınıf/);
+  assert.match(text, /Grade/);
   assert.match(text, /VIP/);
   assert.ok(reply_markup?.inline_keyboard?.[0]?.[0]?.url, 'VIP butonu olmalı');
 });
@@ -109,13 +109,13 @@ test('freeTeaser: gecikme süresini insan diline çevirir', () => {
   const { text } = M.freeTeaser({
     ...sig, created_at: new Date(Date.now() - 95 * 60_000).toISOString(),
   });
-  assert.match(text, /1 sa 35 dk önce/);
+  assert.match(text, /1h 35m ago/);
 });
 
 test('freeTeaser: açık R yoksa o satır çıkmaz', () => {
   const { text } = M.freeTeaser(sig, { openR: null });
   hasNoUndefined(text);
-  assert.ok(!/Şu an:/.test(text));
+  assert.ok(!/Currently:/.test(text));
 });
 
 /* ======================= SONUÇ KARTI ======================= */
@@ -123,33 +123,33 @@ test('resultCard (VIP): kazanç sonucunu net R ile gösterir', () => {
   const { text } = M.resultCard(closed, { forFree: false });
   hasNoUndefined(text);
   checkHtml(text);
-  assert.match(text, /HEDEF/);
-  assert.match(text, /\+1\.12R/, 'net R gösterilmeli');
-  assert.match(text, /kısmi çıkış/);
+  assert.match(text, /TARGET HIT/);
+  assert.match(text, /\+1\.12R/, 'net R must be shown');
+  assert.match(text, /partial exit/);
 });
 
 test('resultCard (free): VIP vurgusu ve buton var', () => {
   const { text, reply_markup } = M.resultCard(closed, { forFree: true });
   hasNoUndefined(text);
   checkHtml(text);
-  assert.match(text, /VIP kanalda/);
-  assert.ok(reply_markup?.inline_keyboard, 'free sonuç kartında VIP butonu olmalı');
+  assert.match(text, /VIP channel/);
+  assert.ok(reply_markup?.inline_keyboard, 'free result card needs the VIP button');
 });
 
 test('resultCard: kayıpta dürüst dil kullanır, kazanç gibi göstermez', () => {
   const lost = { ...closed, status: 'kayıp', r: -1, r_net: -1.04, close_px: 0.00001301 };
   const { text } = M.resultCard(lost, { forFree: true });
   hasNoUndefined(text);
-  assert.match(text, /STOP/);
+  assert.match(text, /STOPPED OUT/);
   assert.match(text, /-1\.04R/);
-  assert.ok(!/HEDEF/.test(text), 'kaybı hedef gibi göstermemeli');
-  assert.match(text, /riski önceden biliyordu|zararı da yönetir/,
-    'kayıpta da güven veren ama dürüst dil');
+  assert.ok(!/TARGET HIT/.test(text), 'a loss must not read like a win');
+  assert.match(text, /knew the risk|manages losses/,
+    'honest but reassuring language on a loss');
 });
 
 test('resultCard: süre dolması ayrı başlıkla görünür', () => {
   const { text } = M.resultCard({ ...closed, status: 'zaman', r: 0.2, r_net: 0.16 });
-  assert.match(text, /SÜRE DOLDU/);
+  assert.match(text, /TIME EXIT/);
 });
 
 /* ======================= PERFORMANS TABLOSU ======================= */
@@ -163,33 +163,33 @@ const rows = [
 test('perfTable: gerçek istatistikten tablo üretir', () => {
   const st = stats(rows);
   const { text } = M.perfTable(st, {
-    title: 'HAFTALIK PERFORMANS', periodLabel: '27 Eki – 2 Kas', forFree: false,
+    title: 'WEEKLY PERFORMANCE', periodLabel: 'Oct 27 – Nov 2', forFree: false,
   });
   hasNoUndefined(text);
   checkHtml(text);
-  assert.match(text, /HAFTALIK PERFORMANS/);
-  assert.match(text, /İşlem/);
-  assert.match(text, /4/, 'işlem sayısı');
-  assert.match(text, /\+2\.30R/, 'net toplam: ' + st.tot);
-  assert.match(text, /SINIFA GÖRE/);
-  assert.match(text, /YÖNE GÖRE/);
-  assert.match(text, /NET/, 'net olduğu belirtilmeli');
+  assert.match(text, /WEEKLY PERFORMANCE/);
+  assert.match(text, /Trades/);
+  assert.match(text, /4/, 'trade count');
+  assert.match(text, /\+2\.30R/, 'net total: ' + st.tot);
+  assert.match(text, /BY GRADE/);
+  assert.match(text, /BY DIRECTION/);
+  assert.match(text, /NET/, 'must state the figures are net');
 });
 
 test('perfTable: boş dönemde uydurma sayı üretmez', () => {
   const { text } = M.perfTable(stats([]), {
-    title: 'HAFTALIK PERFORMANS', periodLabel: 'test', forFree: true,
+    title: 'WEEKLY PERFORMANCE', periodLabel: 'test', forFree: true,
   });
   hasNoUndefined(text);
-  assert.match(text, /kapanan işlem yok/);
-  assert.ok(!/İşlem\s+\d/.test(text), 'boş dönemde tablo basılmamalı');
+  assert.match(text, /No trades closed/);
+  assert.ok(!/Trades\s+\d/.test(text), 'no table for an empty period');
 });
 
 test('perfTable: free sürümünde VIP butonu ve üye sayısı', () => {
   const { text, reply_markup } = M.perfTable(stats(rows), {
-    title: 'AYLIK PERFORMANS', periodLabel: 'Ekim', forFree: true, memberCount: 42,
+    title: 'MONTHLY PERFORMANCE', periodLabel: 'October', forFree: true, memberCount: 42,
   });
-  assert.match(text, /42 üye/);
+  assert.match(text, /42 members/);
   assert.ok(reply_markup?.inline_keyboard);
 });
 
@@ -199,9 +199,9 @@ test('perfTable: zarar eden dönemi de dürüst gösterir', () => {
     { status: 'kayıp', r: -1, r_net: -1.05, dir: 'S', grade: 'C', symbol: 'Y', closed_at: '2026-10-29T10:00:00Z' },
   ];
   const st = stats(bad);
-  const { text } = M.perfTable(st, { title: 'HAFTALIK', periodLabel: 'x', forFree: true });
+  const { text } = M.perfTable(st, { title: 'WEEKLY', periodLabel: 'x', forFree: true });
   hasNoUndefined(text);
-  assert.match(text, /-2\.10R/, 'zarar gizlenmemeli');
+  assert.match(text, /-2\.10R/, 'losses must not be hidden');
   assert.ok(st.tot < 0);
 });
 
@@ -232,12 +232,12 @@ test('dailyFree: analiz içerir ama izleme listesi seviyelerini vermez', () => {
   const { text, reply_markup } = M.dailyFree(dailyData);
   hasNoUndefined(text);
   checkHtml(text);
-  assert.match(text, /GÜNLÜK PİYASA ANALİZİ/);
-  assert.match(text, /REJİM/);
-  assert.match(text, /PİYASA GENİŞLİĞİ/);
+  assert.match(text, /DAILY MARKET BRIEF/);
+  assert.match(text, /REGIME/);
+  assert.match(text, /MARKET BREADTH/);
   assert.match(text, /WIF/);
-  assert.ok(!text.includes('2.345'), 'izleme listesi giriş bölgesi free\'ye sızmamalı');
-  assert.ok(!text.includes('2.46'), 'izleme listesi stopu free\'ye sızmamalı');
+  assert.ok(!text.includes('2.345'), 'watchlist zone must not leak to free');
+  assert.ok(!text.includes('2.46'), 'watchlist stop must not leak to free');
   assert.ok(reply_markup?.inline_keyboard);
 });
 
@@ -245,10 +245,10 @@ test('dailyVip: izleme listesi seviyelerini ve açık pozisyonları verir', () =
   const { text } = M.dailyVip(dailyData);
   hasNoUndefined(text);
   checkHtml(text);
-  assert.match(text, /VIP GÜNLÜK BRİFİNG/);
-  assert.match(text, /İZLEME LİSTESİ/);
-  assert.match(text, /2\.3450/, 'VIP izleme bölgesini görmeli');
-  assert.match(text, /AÇIK POZİSYONLAR/);
+  assert.match(text, /VIP DAILY BRIEFING/);
+  assert.match(text, /WATCHLIST/);
+  assert.match(text, /2\.3450/, 'VIP sees the watchlist zone');
+  assert.match(text, /OPEN POSITIONS/);
   assert.match(text, /DVOL/);
 });
 
@@ -260,7 +260,7 @@ test('dailyVip: veri yoksa (ilk gün) çökmez', () => {
   });
   hasNoUndefined(text);
   checkHtml(text);
-  assert.match(text, /onay bekleyen kurulum yok/);
+  assert.match(text, /nothing qualifying/);
 });
 
 test('dailyFree: veri yoksa çökmez', () => {
@@ -276,12 +276,12 @@ test('dailyRecapFree: işlem olan ve olmayan günü ayrı anlatır', () => {
   const a = M.dailyRecapFree(stats(rows), 1);
   hasNoUndefined(a.text);
   checkHtml(a.text);
-  assert.match(a.text, /GÜN KAPANIŞI/);
+  assert.match(a.text, /DAILY CLOSE/);
   assert.match(a.text, /\+2\.30R/);
 
   const b = M.dailyRecapFree(stats([]), 0);
   hasNoUndefined(b.text);
-  assert.match(b.text, /kapanan işlem olmadı/);
+  assert.match(b.text, /No trades closed today/);
 });
 
 /* ======================= DM ŞABLONLARI ======================= */
@@ -291,11 +291,11 @@ test('startMsg / nasilMsg: geçerli ve bilgilendirici', () => {
   assert.match(a, /Ahmet/);
   assert.match(a, /\/vip/);
 
-  const b = M.nasilMsg();
+  const b = M.howMsg();
   hasNoUndefined(b); checkHtml(b);
   assert.match(b, /FADE/);
-  assert.match(b, /likidite süpürmesi/i);
-  assert.match(b, /Yatırım tavsiyesi değildir/);
+  assert.match(b, /liquidity sweep/i);
+  assert.match(b, /Not financial advice/);
 });
 
 test('startMsg: isim yoksa çökmez', () => {
@@ -313,8 +313,8 @@ test('vipMsg: planları ve aylık karşılığını listeler', () => {
   hasNoUndefined(s); checkHtml(s);
   assert.match(s, /\$49/);
   assert.match(s, /\$129/);
-  assert.match(s, /ayda \$43/, '3ay için aylık karşılık');
-  assert.match(s, /garantisi değildir/, 'geçmiş performans uyarısı şart');
+  assert.match(s, /\$43\/mo/, 'monthly equivalent for the 3-month plan');
+  assert.match(s, /does not guarantee/, 'past-performance warning required');
 });
 
 test('planKeyboard: her plan için buton üretir', () => {
@@ -330,15 +330,15 @@ test('invoiceMsg / grantMsg / statusMsg / expire mesajları geçerli', () => {
 
   const g = M.grantMsg('1ay', Date.now() + 30 * 864e5, 'https://t.me/+abc');
   hasNoUndefined(g); checkHtml(g);
-  assert.match(g, /aktif/);
+  assert.match(g, /access is live/);
 
   const s1 = M.statusMsg({ status: 'aktif', plan: '3ay', expires_at: new Date(Date.now() + 10 * 864e5).toISOString() });
   hasNoUndefined(s1); checkHtml(s1);
-  assert.match(s1, /10 gün/);
+  assert.match(s1, /10 day/);
 
   const s2 = M.statusMsg(null);
   hasNoUndefined(s2);
-  assert.match(s2, /Aktif VIP üyeliğin yok/);
+  assert.match(s2, /no active VIP/);
 
   const e1 = M.expireSoonMsg(3, 'https://t.me/+abc');
   hasNoUndefined(e1); checkHtml(e1);

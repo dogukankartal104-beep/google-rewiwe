@@ -214,12 +214,12 @@ async function dailyData() {
     openN: open.length,
     open,
     yesterday: yRows.length ? stats(yRows) : null,
-    note: MARKET.breadth
+    noteEn: MARKET.breadth
       ? (MARKET.breadth.up / (MARKET.breadth.n || 1) > 0.25
-        ? 'Piyasa risk-on. Short fade\'lerde ekstra seçici ol, sadece A/B sınıfı.'
+        ? 'Market is risk-on. Be extra selective on short fades — A/B grades only.'
         : MARKET.breadth.dn / (MARKET.breadth.n || 1) > 0.25
-          ? 'Piyasa risk-off. Long fade\'lerde acele etme, tetik şart.'
-          : 'Rejim nötr. Sistem normal çalışıyor.')
+          ? 'Market is risk-off. Do not rush long fades; wait for the trigger.'
+          : 'Regime is neutral. The system is operating normally.')
       : null,
   };
 }

@@ -62,60 +62,80 @@ async function handle(u, ctx) {
     if (await adminCmd(cmd, args, from, ctx)) return;
   }
 
+  const lang = await db.getUserLang(from.id);
+
   switch (cmd) {
     case '/id':
       return tg.send(from.id, [
-        '<b>Senin Telegram ID\'n:</b>',
+        M.L(lang, '<b>Your Telegram ID:</b>', '<b>Telegram ID\'n:</b>'),
         `<code>${from.id}</code>`,
         '',
-        'Üstüne dokunarak kopyalayabilirsin.',
-        'Railway → Variables → <code>ADMIN_IDS</code> alanına bunu yaz.',
+        M.L(lang, 'Tap it to copy.', 'Üstüne dokunarak kopyalayabilirsin.'),
+        M.L(lang, 'Railway → Variables → <code>ADMIN_IDS</code>',
+                  'Railway → Variables → <code>ADMIN_IDS</code> alanına yaz.'),
         '',
         ENV.adminIds.length
-          ? (tg.isAdmin(from.id) ? '✅ Zaten admin olarak tanımlısın.' : '')
-          : '⚠️ <code>ADMIN_IDS</code> şu an boş. Bunu girip kaydettikten sonra ' +
-            '/panel ile yönetim komutlarına erişebilirsin.',
+          ? (tg.isAdmin(from.id)
+              ? M.L(lang, '✅ You are registered as an admin.', '✅ Admin olarak tanımlısın.')
+              : '')
+          : M.L(lang,
+              '⚠️ <code>ADMIN_IDS</code> is empty. Set it, then /panel unlocks the admin commands.',
+              '⚠️ <code>ADMIN_IDS</code> boş. Girince /panel ile yönetim komutları açılır.'),
       ].filter(Boolean).join('\n'));
 
     case '/start':
-      return tg.send(from.id, M.startMsg(from.first_name));
+      return tg.send(from.id, M.startMsg(from.first_name, lang),
+        { reply_markup: M.languageKeyboard() });
+
+    case '/language':
+    case '/lang':
+    case '/dil':
+      return tg.send(from.id, M.languageMsg(lang), { reply_markup: M.languageKeyboard() });
 
     case '/vip': {
-      if (!ENV.plans.length) return tg.send(from.id, 'Planlar henüz tanımlanmadı.');
-      return tg.send(from.id, M.vipMsg(ENV.plans), { reply_markup: M.planKeyboard(ENV.plans) });
+      if (!ENV.plans.length) {
+        return tg.send(from.id, M.L(lang, 'No plans configured yet.', 'Planlar henüz tanımlanmadı.'));
+      }
+      return tg.send(from.id, M.vipMsg(ENV.plans, lang),
+        { reply_markup: M.planKeyboard(ENV.plans) });
     }
 
+    case '/status':
     case '/durum': {
       const v = await db.vipGet(from.id).catch(() => null);
-      return tg.send(from.id, M.statusMsg(v));
+      return tg.send(from.id, M.statusMsg(v, lang));
     }
 
+    case '/performance':
     case '/performans': {
+      const aktif = await vip.isActive(from.id);
       const st = await perfLastDays(30);
-      const { text } = M.perfTable(st, {
-        title: 'SON 30 GÜN', periodLabel: 'kapanan tüm işlemler · net',
-        forFree: !(await vip.isActive(from.id)),
+      const { text, reply_markup } = M.perfTable(st, {
+        title: M.L(lang, 'LAST 30 DAYS', 'SON 30 GÜN'),
+        periodLabel: M.L(lang, 'all closed trades · net', 'kapanan tüm işlemler · net'),
+        forFree: !aktif,
       });
-      return tg.send(from.id, text, !(await vip.isActive(from.id))
-        ? { reply_markup: { inline_keyboard: [[{ text: '⭐ VIP\'e katıl', url: ENV.vipInviteLink }]] } }
-        : {});
+      return tg.send(from.id, text, reply_markup ? { reply_markup } : {});
     }
 
+    case '/how':
     case '/nasil':
     case '/nasıl':
-      return tg.send(from.id, M.nasilMsg());
+      return tg.send(from.id, M.howMsg(lang));
 
-    case '/yardim':
     case '/help':
-      return tg.send(from.id, M.startMsg(from.first_name));
+    case '/yardim':
+      return tg.send(from.id, M.startMsg(from.first_name, lang));
 
     default:
       if (txt.startsWith('/')) {
-        return tg.send(from.id, 'Bilinmeyen komut. /start yazarak komutları görebilirsin.');
+        return tg.send(from.id, M.L(lang,
+          'Unknown command. Send /start to see what I can do.',
+          'Bilinmeyen komut. /start yazarak komutları görebilirsin.'));
       }
-      return tg.send(from.id,
-        'Mesajını aldım ama ben otomatik bir botum. Komutlar için /start yaz.\n\n' +
-        (ENV.adminIds.length ? 'Soru için kanal yöneticisine yazabilirsin.' : ''));
+      return tg.send(from.id, M.L(lang,
+        'I got your message, but I am an automated bot. Send /start for the command list.',
+        'Mesajını aldım ama ben otomatik bir botum. Komutlar için /start yaz.'));
   }
 }
 
@@ -123,25 +143,35 @@ async function onCallback(cq) {
   const data = String(cq.data || '');
   const from = cq.from;
 
+  // dil seçimi
+  if (data.startsWith('lang:')) {
+    const lang = data.slice(5) === 'tr' ? 'tr' : 'en';
+    await db.userSeen(from);
+    await db.setUserLang(from.id, lang);
+    await tg.answerCb(cq.id, lang === 'tr' ? 'Türkçe' : 'English');
+    await tg.send(from.id, M.languageSet(lang));
+    return;
+  }
+
   if (data.startsWith('buy:')) {
     const planName = data.slice(4);
     const plan = vip.planByName(planName);
-    if (!plan) { await tg.answerCb(cq.id, 'Plan bulunamadı'); return; }
+    if (!plan) { await tg.answerCb(cq.id, 'Plan not found'); return; }
 
     if (!np.configured()) {
-      await tg.answerCb(cq.id, 'Ödeme sistemi henüz hazır değil');
+      await tg.answerCb(cq.id, 'Payment system not ready yet');
       await tg.send(from.id,
-        'Ödeme sistemi şu an kapalı. Kanal yöneticisiyle iletişime geçebilirsin.');
+        'The payment system is not live yet. Please contact the channel admin.');
       return;
     }
 
-    await tg.answerCb(cq.id, 'Ödeme sayfası hazırlanıyor…');
+    await tg.answerCb(cq.id, 'Preparing your payment page…');
     const orderId = np.makeOrderId(from.id, plan.name);
     try {
       const inv = await np.createInvoice({
         amount: plan.price,
         orderId,
-        description: `VIP ${plan.name} — ${plan.days} gün`,
+        description: `VIP ${plan.name} — ${plan.days} days`,
         plan: plan.name,
       });
       await db.payInsert({
@@ -155,13 +185,13 @@ async function onCallback(cq) {
         status: 'waiting',
         raw: inv.raw || null,
       });
-      await tg.send(from.id, M.invoiceMsg(plan, inv.url));
+      await tg.send(from.id, M.invoiceMsg(plan, inv.url, await db.getUserLang(from.id)));
       log(`fatura olusturuldu ${orderId} (${from.id}, ${plan.name})`);
     } catch (e) {
       warn('fatura hatasi:', e.message);
       await tg.send(from.id,
-        'Ödeme sayfası oluşturulamadı. Birkaç dakika sonra tekrar dene, ' +
-        'sorun sürerse yöneticiye yaz.');
+        'Could not create the payment page. Please try again in a few minutes — ' +
+        'if it keeps failing, message the admin.');
       await vip.notifyAdmins(`⚠️ Fatura hatası (${from.id}): ${e.message}`);
     }
     return;

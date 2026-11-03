@@ -48,7 +48,8 @@ export async function grant(tgId, plan, { amount = 0, orderId = null } = {}) {
   });
 
   try {
-    await tg.send(tgId, M.grantMsg(p.name, expires, link));
+    const lang = await db.getUserLang(tgId);
+    await tg.send(tgId, M.grantMsg(p.name, expires, link, lang));
   } catch (e) {
     warn(`grant DM gönderilemedi (${tgId}): ${e.message}`);
   }
@@ -76,7 +77,8 @@ export async function sweep() {
         status: 'süresi_doldu',
         kicked_at: new Date().toISOString(),
       });
-      await tg.send(v.telegram_id, M.expiredMsg()).catch(() => {});
+      const lang = await db.getUserLang(v.telegram_id);
+      await tg.send(v.telegram_id, M.expiredMsg(lang)).catch(() => {});
       out.kicked++;
       log(`VIP suresi doldu, cikarildi: ${v.telegram_id}`);
     } catch (e) {
@@ -97,7 +99,8 @@ export async function sweep() {
       if (Date.parse(v.expires_at) <= Date.now()) continue;
       const days = Math.max(1, Math.ceil((Date.parse(v.expires_at) - Date.now()) / 864e5));
       try {
-        await tg.send(v.telegram_id, M.expireSoonMsg(days, ENV.vipInviteLink));
+        const lang = await db.getUserLang(v.telegram_id);
+        await tg.send(v.telegram_id, M.expireSoonMsg(days, ENV.vipInviteLink, lang));
         await db.vipPatch(v.telegram_id, { reminded_at: new Date().toISOString() });
         out.reminded++;
       } catch (e) {
