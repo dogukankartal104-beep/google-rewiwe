@@ -365,6 +365,7 @@ export function startMsg(name) {
     '/durum — üyeliğim ne zaman bitiyor',
     '/performans — son 30 günün net sonucu',
     '/nasil — sistem nasıl çalışır',
+    '/id — Telegram ID\'mi göster',
     '',
     `Ücretsiz kanal: ${ENV.freeLink}`,
   ].join('\n');

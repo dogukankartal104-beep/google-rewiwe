@@ -41,6 +41,7 @@ export async function pollLoop(ctx) {
 
 async function handle(u, ctx) {
   if (u.callback_query) return onCallback(u.callback_query);
+  if (u.my_chat_member) return onMyChatMember(u.my_chat_member);
   const msg = u.message;
   if (!msg?.text || !msg.from) return;
   if (msg.chat?.type !== 'private') return;   // sadece DM
@@ -58,6 +59,15 @@ async function handle(u, ctx) {
   }
 
   switch (cmd) {
+    case '/id':
+      return tg.send(from.id, [
+        '<b>Senin Telegram ID\'n:</b>',
+        `<code>${from.id}</code>`,
+        '',
+        'Üstüne dokunarak kopyalayabilirsin.',
+        'Railway → Variables → <code>ADMIN_IDS</code> alanına bunu yaz.',
+      ].join('\n'));
+
     case '/start':
       return tg.send(from.id, M.startMsg(from.first_name));
 
@@ -162,6 +172,7 @@ async function adminCmd(cmd, args, from, ctx) {
         '/uyeler — aktif VIP listesi',
         '/ver &lt;telegram_id&gt; &lt;plan&gt; — elle VIP ver',
         '/al &lt;telegram_id&gt; — VIP\'i bitir ve çıkar',
+        '/kanallar — keşfedilen kanallar ve ID\'leri',
         '/dash — dashboard linki',
         '/tiklama — VIP link tıklama istatistiği',
         '/tara — şimdi bir tarama turu çalıştır',
@@ -241,6 +252,35 @@ async function adminCmd(cmd, args, from, ctx) {
         await tg.send(from.id, `✅ ${r.scanned} aday · ${r.fired.length} sinyal · ${r.watch.length} izlemede · ${(r.ms / 1000).toFixed(0)}sn`);
       } catch (e) { await tg.send(from.id, '❌ ' + e.message); }
       return true;
+
+    case '/kanallar': {
+      const liste = (await db.getState('kesfedilen_kanallar', [])) || [];
+      if (!liste.length) {
+        await tg.send(from.id, [
+          'Henüz hiçbir kanal keşfedilmedi.',
+          '',
+          'Botu kanala <b>yönetici</b> olarak ekle — ID\'yi otomatik yakalayıp',
+          'buraya yazacağım. Zaten ekliysen, yöneticilikten çıkarıp tekrar ekle.',
+        ].join('\n'));
+        return true;
+      }
+      const satir = liste.map((k) => {
+        const ayarli =
+          String(ENV.vipChat) === String(k.id) ? ' ✓ VIP'
+          : (String(ENV.freeChat) === String(k.id)
+             || (k.kullanici_adi && ENV.freeChat === '@' + k.kullanici_adi)) ? ' ✓ FREE'
+          : '';
+        return `<b>${tg.esc(k.baslik || '—')}</b>${ayarli}\n` +
+          `<code>${k.id}</code>` +
+          `${k.kullanici_adi ? ' · @' + tg.esc(k.kullanici_adi) : ' · özel'}` +
+          `${k.yetkili ? '' : ' · ⚠️ yönetici değil'}`;
+      });
+      await tg.send(from.id, [
+        '<b>KEŞFEDİLEN KANALLAR</b>', '', satir.join('\n\n'), '',
+        '<i>Ayarlı olmayanları Railway → Variables\'a yaz.</i>',
+      ].join('\n'));
+      return true;
+    }
 
     case '/dash': {
       if (!ENV.dashKey) {
@@ -347,5 +387,69 @@ async function adminCmd(cmd, args, from, ctx) {
 
     default:
       return false;
+  }
+}
+
+/* ============================================================
+   KANAL KEŞFİ
+   Bot bir kanala yönetici yapıldığında Telegram "my_chat_member"
+   güncellemesi gönderir. Kanal ID'sini buradan yakalayıp kaydediyoruz —
+   böylece kimsenin getUpdates'i elle açıp JSON içinden ID araması gerekmiyor.
+   ============================================================ */
+async function onMyChatMember(ev) {
+  const chat = ev.chat || {};
+  if (!['channel', 'supergroup', 'group'].includes(chat.type)) return;
+
+  const yeni = ev.new_chat_member?.status;
+  const yetkili = yeni === 'administrator' || yeni === 'creator';
+
+  // keşfedilen kanalları sakla (dashboard ve /kanallar için)
+  try {
+    const liste = (await db.getState('kesfedilen_kanallar', [])) || [];
+    const i = liste.findIndex((x) => String(x.id) === String(chat.id));
+    const kayit = {
+      id: chat.id,
+      baslik: chat.title || '',
+      kullanici_adi: chat.username || null,
+      tur: chat.type,
+      yetkili,
+      durum: yeni,
+      gorulme: new Date().toISOString(),
+    };
+    if (i >= 0) liste[i] = kayit; else liste.push(kayit);
+    await db.setState('kesfedilen_kanallar', liste.slice(-20));
+  } catch (e) { warn('kanal kaydı:', e.message); }
+
+  log(`kanal güncellemesi: ${chat.title || chat.id} (${chat.id}) -> ${yeni}`);
+
+  if (!yetkili) return;
+
+  // Hangi env'e yazılacağını tahmin et: public ise free, özel ise VIP
+  const ozel = !chat.username;
+  const oneri = ozel ? 'VIP_CHANNEL_ID' : 'FREE_CHANNEL_ID';
+  const zatenAyarli =
+    String(ENV.vipChat) === String(chat.id) || String(ENV.freeChat) === String(chat.id) ||
+    (chat.username && ENV.freeChat === '@' + chat.username);
+
+  const mesaj = [
+    '✅ <b>Kanala yönetici olarak eklendim</b>',
+    '',
+    `<b>${tg.esc(chat.title || '—')}</b>`,
+    chat.username ? `@${tg.esc(chat.username)} · herkese açık` : 'özel kanal',
+    '',
+    '<b>Kanal ID\'si:</b>',
+    `<code>${chat.id}</code>`,
+    '',
+    zatenAyarli
+      ? '✓ Bu kanal zaten ayarlı, bir şey yapmana gerek yok.'
+      : `Railway → Variables → <code>${oneri}</code> alanına yukarıdaki sayıyı yaz.`,
+  ].join('\n');
+
+  for (const id of ENV.adminIds) {
+    try { await tg.send(id, mesaj); } catch { /* yoksay */ }
+  }
+  // Admin tanımlı değilse en azından log'a tam olarak yaz
+  if (!ENV.adminIds.length) {
+    log(`>>> ${oneri} = ${chat.id}  (${chat.title || ''})`);
   }
 }
