@@ -5,6 +5,7 @@ import * as tg from './telegram.js';
 import * as M from './messages.js';
 import * as np from './payments.js';
 import * as vip from './vip.js';
+import { applyBranding, reportText } from './brand.js';
 import {
   perfLastDays, publishDaily, publishWeekly, publishMonthly,
   publishDailyRecap, publishEducation, publishBreakingNews, publishNewsDigest,
@@ -42,6 +43,7 @@ export async function pollLoop(ctx) {
 async function handle(u, ctx) {
   if (u.callback_query) return onCallback(u.callback_query);
   if (u.my_chat_member) return onMyChatMember(u.my_chat_member);
+  if (u.chat_member) return onChatMember(u.chat_member);
   const msg = u.message;
   if (!msg?.text || !msg.from) return;
   if (msg.chat?.type !== 'private') return;   // sadece DM
@@ -83,21 +85,39 @@ async function handle(u, ctx) {
               '⚠️ <code>ADMIN_IDS</code> boş. Girince /panel ile yönetim komutları açılır.'),
       ].filter(Boolean).join('\n'));
 
-    case '/start':
+    case '/start': {
+      // Every public "Join VIP" button lands here as /start vip_<source>
+      const payload = String(args[0] || '');
+      if (/^vip(_|$)/.test(payload)) {
+        db.clickAdd({ kind: 'open', source: payload.slice(4) || 'direct', signal_key: null, ua: null });
+        return sendVipMenu(from, lang);
+      }
       return tg.send(from.id, M.startMsg(from.first_name, lang),
         { reply_markup: M.languageKeyboard() });
+    }
 
     case '/language':
     case '/lang':
     case '/dil':
       return tg.send(from.id, M.languageMsg(lang), { reply_markup: M.languageKeyboard() });
 
-    case '/vip': {
-      if (!ENV.plans.length) {
-        return tg.send(from.id, M.L(lang, 'No plans configured yet.', 'Planlar henüz tanımlanmadı.'));
-      }
-      return tg.send(from.id, M.vipMsg(ENV.plans, lang),
+    case '/vip':
+      return sendVipMenu(from, lang);
+
+    case '/join': {
+      const v = await db.vipGet(from.id).catch(() => null);
+      const active = Boolean(v && v.status === 'aktif' && Date.parse(v.expires_at) > Date.now());
+      if (!active) return tg.send(from.id, M.joinNoAccessMsg(lang),
         { reply_markup: M.planKeyboard(ENV.plans) });
+      try {
+        const link = await vip.issueInvite(from.id, { previous: v.invite_link });
+        await db.vipPatch(from.id, { invite_link: link });
+        return tg.send(from.id, M.joinMsg(link, lang));
+      } catch (e) {
+        warn(`/join failed (${from.id}): ${e.message}`);
+        await vip.notifyAdmins(`⚠️ /join failed for <code>${from.id}</code>: ${tg.esc(e.message)}`);
+        return tg.send(from.id, M.joinFailedMsg(lang));
+      }
     }
 
     case '/status':
@@ -167,9 +187,13 @@ async function onCallback(cq) {
 
     await tg.answerCb(cq.id, 'Preparing your payment page…');
     const orderId = np.makeOrderId(from.id, plan.name);
+    // returning members (anyone who has ever had VIP) get RENEW_DISCOUNT_PCT off, if set
+    const prior = await db.vipGet(from.id).catch(() => null);
+    const discountPct = prior && ENV.renewDiscountPct > 0 ? Math.min(90, ENV.renewDiscountPct) : 0;
+    const price = discountPct ? Math.round(plan.price * (100 - discountPct)) / 100 : plan.price;
     try {
       const inv = await np.createInvoice({
-        amount: plan.price,
+        amount: price,
         orderId,
         description: `VIP ${plan.name} — ${plan.days} days`,
         plan: plan.name,
@@ -180,12 +204,13 @@ async function onCallback(cq) {
         telegram_id: from.id,
         plan: plan.name,
         days: plan.days,
-        amount: plan.price,
+        amount: price,
         currency: ENV.npCurrency,
         status: 'waiting',
         raw: inv.raw || null,
       });
-      await tg.send(from.id, M.invoiceMsg(plan, inv.url, await db.getUserLang(from.id)));
+      await tg.send(from.id, M.invoiceMsg({ ...plan, price }, inv.url,
+        await db.getUserLang(from.id), { discountPct, listPrice: plan.price }));
       log(`fatura olusturuldu ${orderId} (${from.id}, ${plan.name})`);
     } catch (e) {
       warn('fatura hatasi:', e.message);
@@ -211,6 +236,7 @@ async function adminCmd(cmd, args, from, ctx) {
         '/uyeler — aktif VIP listesi',
         '/ver &lt;telegram_id&gt; &lt;plan&gt; — elle VIP ver',
         '/al &lt;telegram_id&gt; — VIP\'i bitir ve çıkar',
+        '/brand — channel names, bios, logos, pinned posts (re-apply)',
         '/kanallar — keşfedilen kanallar ve ID\'leri',
         '/dash — dashboard linki',
         '/tiklama — VIP link tıklama istatistiği',
@@ -291,6 +317,15 @@ async function adminCmd(cmd, args, from, ctx) {
         await tg.send(from.id, `✅ ${r.scanned} aday · ${r.fired.length} sinyal · ${r.watch.length} izlemede · ${(r.ms / 1000).toFixed(0)}sn`);
       } catch (e) { await tg.send(from.id, '❌ ' + e.message); }
       return true;
+
+    case '/brand': {
+      await tg.send(from.id, 'Applying channel branding…');
+      try {
+        const r = await applyBranding({ force: true });
+        await tg.send(from.id, reportText(r));
+      } catch (e) { await tg.send(from.id, '❌ ' + tg.esc(e.message)); }
+      return true;
+    }
 
     case '/kanallar': {
       const liste = (await db.getState('kesfedilen_kanallar', [])) || [];
@@ -510,5 +545,70 @@ async function onMyChatMember(ev) {
     } else {
       log('>>> Admin\'e DM gidemedi. Telegram\'da bota önce /start yaz, sonra /kanallar.');
     }
+  }
+}
+
+
+/* ============================================================
+   VIP MENU
+   Members see their status plus the extend options; everyone else sees the pitch.
+   ============================================================ */
+async function sendVipMenu(from, lang) {
+  if (!ENV.plans.length) {
+    return tg.send(from.id, M.L(lang, 'No plans configured yet.', 'Planlar henüz tanımlanmadı.'));
+  }
+  const v = await db.vipGet(from.id).catch(() => null);
+  const active = Boolean(v && v.status === 'aktif' && Date.parse(v.expires_at) > Date.now());
+  const text = active ? M.vipActiveMsg(v, lang) : M.vipMsg(ENV.plans, lang);
+  return tg.send(from.id, text, { reply_markup: M.planKeyboard(ENV.plans) });
+}
+
+/* ============================================================
+   PAYWALL GUARD
+   Anyone who joins the VIP channel without an active membership is removed —
+   for example a friend using a paying member's link. The link is single-use,
+   so the member just sends /join to get a new one.
+   Fails OPEN: if the database cannot be read nobody is removed by mistake.
+   ============================================================ */
+async function onChatMember(ev) {
+  const chat = ev.chat || {};
+  if (!ENV.vipChat || String(chat.id) !== String(ENV.vipChat)) return;
+
+  const userId = ev.new_chat_member?.user?.id;
+  if (!userId) return;
+
+  let row = null;
+  try {
+    row = await db.vipGet(userId);
+  } catch (e) {
+    warn(`paywall guard: could not read membership for ${userId}, not removing: ${e.message}`);
+    return;
+  }
+  const activeVip = Boolean(row && row.status === 'aktif' && Date.parse(row.expires_at) > Date.now());
+
+  const remove = vip.shouldRemoveJoiner({
+    chatId: chat.id,
+    vipChatId: ENV.vipChat,
+    oldStatus: ev.old_chat_member?.status,
+    newStatus: ev.new_chat_member?.status,
+    userId,
+    actorId: ev.from?.id,
+    isBot: Boolean(ev.new_chat_member?.user?.is_bot),
+    adminIds: ENV.adminIds,
+    activeVip,
+  });
+  if (!remove) return;
+
+  try {
+    await tg.kick(ENV.vipChat, userId);
+    log(`paywall guard: removed unauthorised joiner ${userId}`);
+    const lang = await db.getUserLang(userId);
+    tg.send(userId, M.unauthorizedJoinMsg(lang), { reply_markup: M.planKeyboard(ENV.plans) }).catch(() => {});
+    const name = [ev.new_chat_member.user.first_name, ev.new_chat_member.user.username && '@' + ev.new_chat_member.user.username]
+      .filter(Boolean).join(' ');
+    await vip.notifyAdmins(`🛡 Removed an unauthorised joiner from VIP: <code>${userId}</code> ${tg.esc(name)}`);
+  } catch (e) {
+    warn(`paywall guard: could not remove ${userId}: ${e.message}`);
+    await vip.notifyAdmins(`⚠️ Someone without VIP joined the VIP channel and I could not remove them: <code>${userId}</code> — ${tg.esc(e.message)}`);
   }
 }

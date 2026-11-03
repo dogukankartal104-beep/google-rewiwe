@@ -14,6 +14,7 @@ import {
 } from './publisher.js';
 import { pollLoop } from './commands.js';
 import { startServer } from './server.js';
+import { applyBranding, reportText } from './brand.js';
 import { log, warn, err, sleep, trDate, fmt } from './util.js';
 
 const ARG = new Set(process.argv.slice(2));
@@ -189,6 +190,15 @@ async function main() {
     catch (e) { err('veritabanı kurulamadı: ' + e.message); }
   }
 
+  // Learn the bot's own username first: every public "Join VIP" button is a deep link to it.
+  if (ENV.botToken) {
+    try {
+      const me = await tg.getMe();
+      if (!ENV.botUsername) ENV.botUsername = me.username;
+      log(`bot: @${ENV.botUsername}`);
+    } catch (e) { warn('getMe failed — VIP buttons fall back to the free channel: ' + e.message); }
+  }
+
   startServer();
 
   try { await warmup(); }
@@ -208,6 +218,16 @@ async function main() {
   } else {
     warn('TELEGRAM_BOT_TOKEN yok — DM dinleyicisi başlatılmadı. ' +
       'Tarama ve kayıt çalışmaya devam ediyor.');
+  }
+
+  // Channel + bot branding, applied once per version (see brand.js). Never blocks startup.
+  if (ENV.brandAuto && ENV.botToken && !ENV.dryRun) {
+    applyBranding()
+      .then(async (r) => {
+        if (r.skipped) { log(`branding: ${r.skipped}`); return; }
+        await vip.notifyAdmins(reportText(r));
+      })
+      .catch((e) => warn('branding failed: ' + e.message));
   }
 
   // zamanlayıcı

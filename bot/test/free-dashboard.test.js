@@ -137,12 +137,13 @@ test('freeShowcase: "yön tek başına yetmez" argümanı var (dönüşüm mesaj
 });
 
 /* ======================= TAKİPLİ LİNK ======================= */
-test('vipUrl: PUBLIC_URL yoksa doğrudan davet linki', () => {
-  const saved = ENV.publicUrl;
+test('vipUrl: without PUBLIC_URL it is the bot deep link, never an invite link', () => {
+  const saved = [ENV.publicUrl, ENV.botUsername];
   ENV.publicUrl = '';
+  ENV.botUsername = 'my_bot';
   try {
-    assert.equal(M.vipUrl('showcase', 'K1'), ENV.vipInviteLink);
-  } finally { ENV.publicUrl = saved; }
+    assert.equal(M.vipUrl('showcase', 'K1'), 'https://t.me/my_bot?start=vip_showcase');
+  } finally { [ENV.publicUrl, ENV.botUsername] = saved; }
 });
 
 test('vipUrl: PUBLIC_URL varsa kaynak ve sinyal anahtarıyla takipli link', () => {

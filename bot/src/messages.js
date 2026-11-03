@@ -6,7 +6,7 @@
    - No invented performance numbers. Every figure comes from closed trades.
    - No profit guarantees or "signals that always win" language.
    - The risk disclaimer ships on every public message. */
-import { ENV, CFG } from './config.js';
+import { ENV, CFG, botLink } from './config.js';
 import { fmt, pct, shortn, trDateTime, trShort, dur, seans } from './util.js';
 
 const RISK = 'Not financial advice. Leveraged trading can lose your entire capital.';
@@ -21,14 +21,19 @@ const dirArrow = (d) => (d === 'L' ? '▲' : '▼');
 // pick a string by language, falling back to English
 export const L = (lang, en, tr) => (lang === 'tr' ? tr : en);
 
-/* VIP button. When PUBLIC_URL is set the link is routed through the bot so
-   interest can be measured — Telegram's Bot API does not expose post views. */
+/* VIP button. It must NEVER point at a VIP invite link — that would let anyone
+   skip the payment. Order of preference:
+   1. PUBLIC_URL/go/vip  (tracked redirect, which lands in the bot)
+   2. the bot deep link directly
+   3. the free channel (harmless fallback if the bot username is not known yet) */
 export function vipUrl(source = 'free', signalKey = null) {
-  if (!ENV.publicUrl) return ENV.vipInviteLink;
-  const u = new URL(ENV.publicUrl + '/go/vip');
-  u.searchParams.set('s', source);
-  if (signalKey) u.searchParams.set('k', signalKey);
-  return u.toString();
+  if (ENV.publicUrl) {
+    const u = new URL(ENV.publicUrl + '/go/vip');
+    u.searchParams.set('s', source);
+    if (signalKey) u.searchParams.set('k', signalKey);
+    return u.toString();
+  }
+  return botLink('vip_' + source) || ENV.freeLink;
 }
 
 const vipBtn = (source = 'free', signalKey = null, text = '⭐ Join VIP') => ({
@@ -390,6 +395,7 @@ export function startMsg(name, lang = 'en') {
       'Onay gelmezse <b>işlem açılmaz</b>.', '',
       '<b>Komutlar</b>',
       '/vip — VIP üyelik ve fiyatlar',
+      '/join — taze VIP davet linki (üyeler)',
       '/status — üyeliğim ne zaman bitiyor',
       '/performance — son 30 günün net sonucu',
       '/how — sistem nasıl çalışır',
@@ -408,6 +414,7 @@ export function startMsg(name, lang = 'en') {
     'No confirmation, <b>no trade</b>. A veto means the coin is left alone.', '',
     '<b>Commands</b>',
     '/vip — VIP membership and pricing',
+    '/join — get a fresh VIP invite link (members)',
     '/status — when does my membership end',
     '/performance — net result of the last 30 days',
     '/how — how the system works',
@@ -498,15 +505,19 @@ export function languageSet(lang) {
     '✅ Dil Türkçe olarak ayarlandı.');
 }
 
-export function invoiceMsg(plan, url, lang = 'en') {
+export function invoiceMsg(plan, url, lang = 'en', { discountPct = 0, listPrice = null } = {}) {
+  const priceLine = discountPct > 0 && listPrice
+    ? L(lang, `<s>$${listPrice}</s> <b>$${plan.price}</b> — ${discountPct}% returning-member discount`,
+      `<s>$${listPrice}</s> <b>$${plan.price}</b> — %${discountPct} geri dönen üye indirimi`)
+    : `<b>$${plan.price}</b>`;
   return L(lang, [
-    `💳 <b>${plan.name} VIP — $${plan.price}</b>`, '',
+    `💳 <b>${plan.name} VIP</b> — ${priceLine}`, '',
     'On the payment page you can pay with any coin you like (USDT TRC20 has the lowest network fee).', '',
     `<a href="${url}">👉 Open payment page</a>`, '',
     'The moment the payment confirms on-chain, your VIP invite link lands here automatically.',
     'That usually takes 1–10 minutes. You can close the page.',
   ].join('\n'), [
-    `💳 <b>${plan.name} VIP — $${plan.price}</b>`, '',
+    `💳 <b>${plan.name} VIP</b> — ${priceLine}`, '',
     'Ödeme sayfasında istediğin kripto parayı seçebilirsin (USDT TRC20 en düşük komisyonlu).', '',
     `<a href="${url}">👉 Ödemeyi aç</a>`, '',
     'Ödeme ağda onaylandığı anda VIP davet linki buraya otomatik gelir.',
@@ -515,45 +526,94 @@ export function invoiceMsg(plan, url, lang = 'en') {
 }
 
 export function grantMsg(plan, expiresAt, link, lang = 'en') {
+  const linkEn = link
+    ? [`<a href="${link}">⭐ Join the VIP channel</a>`, '',
+      '<i>This link is yours alone and works once. If someone else uses it they are removed, and you can get a new one with /join.</i>']
+    : ['Your invite link could not be generated automatically.',
+      'Send /join in a minute and it will be created — or message the admin.'];
+  const linkTr = link
+    ? [`<a href="${link}">⭐ VIP kanala katıl</a>`, '',
+      '<i>Bu link sana özel ve tek kullanımlık. Başkası kullanırsa çıkarılır, sen de /join ile yenisini alırsın.</i>']
+    : ['Davet linki otomatik üretilemedi.',
+      'Bir dakika sonra /join yaz, link oluşturulur — ya da yöneticiye yaz.'];
   return L(lang, [
     '✅ <b>Payment received — your VIP access is live!</b>', '',
     `Plan: <b>${plan}</b>`,
     `Expires: <b>${trDateTime(expiresAt)}</b>`, '',
-    `<a href="${link}">⭐ Join the VIP channel</a>`, '',
-    '<i>This link is yours alone and works once. If you share it, you lose it.</i>', '',
+    ...linkEn, '',
     'Welcome aboard. Signals start landing the moment the next setup clears.',
   ].join('\n'), [
     '✅ <b>Ödeme alındı — VIP üyeliğin aktif!</b>', '',
     `Plan: <b>${plan}</b>`,
     `Bitiş: <b>${trDateTime(expiresAt)}</b>`, '',
-    `<a href="${link}">⭐ VIP kanala katıl</a>`, '',
-    '<i>Bu link sana özel ve tek kullanımlık.</i>', '',
+    ...linkTr, '',
     'Hoş geldin.',
   ].join('\n'));
 }
 
-export function expireSoonMsg(days, link, lang = 'en') {
+// reminder before expiry — always sent together with the plan buttons (renew in one tap)
+export function expireSoonMsg(days, lang = 'en') {
   return L(lang, [
-    `⏰ <b>Your VIP access ends in ${days} day(s).</b>`, '',
-    'Send /vip to renew and keep it uninterrupted.',
-    'When it expires you are removed from the channel automatically; renewing puts you straight back.',
+    `⏰ <b>Your VIP access ends in ${days} day${days === 1 ? '' : 's'}.</b>`, '',
+    'Renew now and the new time is <b>added on top</b> of what you have left — you lose nothing by renewing early.',
+    'If it lapses you are removed from the channel automatically; renewing puts you straight back.',
   ].join('\n'), [
     `⏰ <b>VIP üyeliğin ${days} gün sonra bitiyor.</b>`, '',
-    'Kesintisiz devam etmek için /vip yazıp yenileyebilirsin.',
+    'Şimdi yenilersen yeni süre kalan sürenin <b>üstüne eklenir</b> — erken yenilemekle bir şey kaybetmezsin.',
+    'Süre biterse kanaldan otomatik çıkarılırsın; yenileyince hemen geri alınırsın.',
   ].join('\n'));
 }
 
 export function expiredMsg(lang = 'en') {
   return L(lang, [
     '⌛️ <b>Your VIP membership has ended.</b>', '',
-    'You have been removed from the VIP channel. Send /vip to come back.', '',
+    'You have been removed from the VIP channel. Pick a plan below to come back — your new invite link arrives the moment the payment confirms.', '',
     `You can stay in the free channel: ${ENV.freeLink}`,
   ].join('\n'), [
     '⌛️ <b>VIP üyeliğin sona erdi.</b>', '',
-    'VIP kanaldan çıkarıldın. Tekrar katılmak için /vip yaz.', '',
+    'VIP kanaldan çıkarıldın. Geri dönmek için aşağıdan bir plan seç — ödeme onaylanınca yeni davet linkin gelir.', '',
     `Ücretsiz kanal: ${ENV.freeLink}`,
   ].join('\n'));
 }
+
+// one-time nudge a few days after the membership lapsed
+export function winbackMsg(lang = 'en') {
+  return L(lang, [
+    '👋 <b>Still thinking about VIP?</b>', '',
+    'Since you left, the system kept scanning 400+ pairs around the clock and posting every setup with its entry, stop and targets.',
+    'Your seat is open whenever you want it back — pick a plan below.', '',
+    '<i>This is the only reminder you will get.</i>',
+  ].join('\n'), [
+    '👋 <b>VIP\'i hâlâ düşünüyor musun?</b>', '',
+    'Sen ayrıldıktan sonra da sistem 400+ pariteyi tarayıp her kurulumu giriş, stop ve hedefleriyle paylaştı.',
+    'İstediğin zaman geri dönebilirsin — aşağıdan bir plan seç.', '',
+    '<i>Bu, alacağın tek hatırlatma.</i>',
+  ].join('\n'));
+}
+
+export function joinMsg(link, lang = 'en') {
+  return L(lang, [
+    '🔑 <b>Your VIP invite link</b>', '',
+    `<a href="${link}">⭐ Join the VIP channel</a>`, '',
+    '<i>Single-use and made for you. It expires in 3 days.</i>',
+  ].join('\n'), [
+    '🔑 <b>VIP davet linkin</b>', '',
+    `<a href="${link}">⭐ VIP kanala katıl</a>`, '',
+    '<i>Tek kullanımlık ve sana özel. 3 gün geçerli.</i>',
+  ].join('\n'));
+}
+
+export const joinNoAccessMsg = (lang = 'en') => L(lang,
+  'You have no active VIP membership, so there is no invite to give.\n\nSend /vip to see the plans.',
+  'Aktif VIP üyeliğin yok, o yüzden verecek bir davet yok.\n\n/vip yazarak planları görebilirsin.');
+
+export const joinFailedMsg = (lang = 'en') => L(lang,
+  'Could not create the invite link right now. Please try again in a minute — the admin has been told.',
+  'Davet linki şu an oluşturulamadı. Bir dakika sonra tekrar dene — yönetici bilgilendirildi.');
+
+export const unauthorizedJoinMsg = (lang = 'en') => L(lang,
+  'That VIP link belongs to a paying member, so you were removed from the channel.\nSend /vip to get your own access.',
+  'O VIP linki ödeme yapan bir üyeye ait, bu yüzden kanaldan çıkarıldın.\nKendi erişimin için /vip yaz.');
 
 export function statusMsg(v, lang = 'en') {
   if (!v || v.status !== 'aktif') {
@@ -573,6 +633,13 @@ export function statusMsg(v, lang = 'en') {
     `Bitiş: <b>${trDateTime(Date.parse(v.expires_at))}</b>`,
     `Kalan: <b>${left} gün</b>`,
   ].join('\n'));
+}
+
+// /vip for someone who already has VIP: status first, then the extend options
+export function vipActiveMsg(v, lang = 'en') {
+  return statusMsg(v, lang) + '\n\n' + L(lang,
+    'Extend below — the new time is added to what you have left.\nLost your invite link? Send /join.',
+    'Uzatmak için aşağıdan seç — yeni süre kalan sürenin üstüne eklenir.\nDavet linkini kaybettiysen /join yaz.');
 }
 
 export function howMsg(lang = 'en') {

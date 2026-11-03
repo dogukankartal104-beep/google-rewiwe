@@ -86,6 +86,34 @@ export const pin = (chatId, messageId) =>
 
 export const getMe = () => call('getMe');
 
+/* ---- chat / bot profile management ---- */
+export const setTitle = (chatId, title) => call('setChatTitle', { chat_id: chatId, title });
+export const setDescription = (chatId, description) =>
+  call('setChatDescription', { chat_id: chatId, description });
+
+// generates a NEW primary invite link and revokes the previous primary one
+export const exportPrimaryInvite = (chatId) => call('exportChatInviteLink', { chat_id: chatId });
+
+export const getChat = (chatId) => call('getChat', { chat_id: chatId });
+
+export const setBotDescription = (description, languageCode) =>
+  call('setMyDescription', { description, ...(languageCode ? { language_code: languageCode } : {}) });
+export const setBotShortDescription = (short, languageCode) =>
+  call('setMyShortDescription', { short_description: short, ...(languageCode ? { language_code: languageCode } : {}) });
+export const setBotCommands = (commands, languageCode) =>
+  call('setMyCommands', { commands, ...(languageCode ? { language_code: languageCode } : {}) });
+
+// multipart upload (setChatPhoto needs a real file, JSON cannot carry it)
+export async function setPhoto(chatId, buffer, filename = 'photo.png') {
+  const fd = new FormData();
+  fd.append('chat_id', String(chatId));
+  fd.append('photo', new Blob([buffer], { type: 'image/png' }), filename);
+  const r = await fetch(`${API()}/setChatPhoto`, { method: 'POST', body: fd, signal: AbortSignal.timeout(40000) });
+  const j = await r.json().catch(() => null);
+  if (!j?.ok) throw new Error(`setChatPhoto: ${j?.description || 'HTTP ' + r.status}`);
+  return j.result;
+}
+
 // Tek kullanımlık, süreli VIP davet linki
 export const createInvite = (chatId, { name = '', expireSec = 3 * 86400, limit = 1 } = {}) =>
   call('createChatInviteLink', {

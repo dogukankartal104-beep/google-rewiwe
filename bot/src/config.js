@@ -64,7 +64,10 @@ export const ENV = {
   botToken: str('TELEGRAM_BOT_TOKEN'),
   freeChat: str('FREE_CHANNEL_ID'),     // @cryptopumpradarr veya -100...
   vipChat: str('VIP_CHANNEL_ID'),       // -100... (özel kanal, @ yok)
-  vipInviteLink: str('VIP_INVITE_LINK', 'https://t.me/+B6q_nphrEu1mMjk0'),
+  // NOTE: there is deliberately NO static VIP invite link setting. A static link
+  // in a public button lets anyone skip the payment. VIP access is only ever
+  // granted through single-use links the bot creates after a confirmed payment.
+  botUsername: str('BOT_USERNAME').replace(/^@/, ''),   // filled from getMe() at startup
   freeLink: str('FREE_CHANNEL_LINK', 'https://t.me/cryptopumpradarr'),
   adminIds: str('ADMIN_IDS').split(',').map((x) => x.trim()).filter(Boolean),
 
@@ -101,6 +104,12 @@ export const ENV = {
   newsCheckMin: Number(str('NEWS_CHECK_MIN', '20')),  // kaç dakikada bir bakılsın
   newsMaxPerDay: Number(str('NEWS_MAX_PER_DAY', '4')),// günde en fazla kaç flaş haber
   newsDigestHour: Number(str('NEWS_DIGEST_HOUR', '19')), // günlük haber özeti saati
+
+  // --- yenileme / marka ---
+  renewDiscountPct: Number(str('RENEW_DISCOUNT_PCT', '0')),  // returning members' discount, 0 = off
+  brandAuto: bool('BRAND_AUTO', true),                       // apply channel branding once per version
+  brandFreeTitle: str('BRAND_FREE_TITLE', 'Crypto Pump Radar'),
+  brandVipTitle: str('BRAND_VIP_TITLE', 'Crypto Pump Radar · VIP'),
 
   // --- eğitim içeriği ---
   eduOn: bool('EDU_ON', true),
@@ -150,3 +159,12 @@ export function missingEnv() {
   if (!ENV.dbUrl) miss.push('DATABASE_URL');
   return miss;
 }
+
+
+/* Deep link into the bot. Every public "Join VIP" button points here (directly
+   or via /go/vip) so that the ONLY way into VIP is through the checkout. */
+export const botLink = (payload = '') => {
+  if (!ENV.botUsername) return null;
+  const clean = String(payload).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 60);
+  return `https://t.me/${ENV.botUsername}${clean ? `?start=${clean}` : ''}`;
+};

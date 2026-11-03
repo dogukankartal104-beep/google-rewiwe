@@ -81,6 +81,8 @@ const SCHEMA = [
     created_at timestamptz not null default now()
   )`,
   `create index if not exists vip_expires_idx on vip_members (status, expires_at)`,
+  `alter table vip_members add column if not exists remind_stage int not null default 0`,
+  `alter table vip_members add column if not exists winback_at timestamptz`,
 
   `create table if not exists payments (
     id bigserial primary key,
@@ -281,6 +283,12 @@ export const vipActive = () =>
 export const vipExpiring = (untilIso) =>
   q(`select * from vip_members where status='aktif' and expires_at <= $1
      order by expires_at asc limit 200`, [untilIso]);
+
+// lapsed members who have not yet had their one win-back message
+export const vipWinbackDue = (kickedBeforeIso) =>
+  q(`select * from vip_members where status='süresi_doldu' and winback_at is null
+     and kicked_at is not null and kicked_at <= $1 order by kicked_at asc limit 100`,
+    [kickedBeforeIso]);
 
 export const vipJoinedSince = (iso) =>
   q(`select * from vip_members where last_payment_at >= $1

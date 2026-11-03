@@ -1,7 +1,7 @@
 // HTTP sunucu: NOWPayments IPN callback + Railway health check.
 // Bağımlılık yok, node:http ile.
 import http from 'node:http';
-import { ENV } from './config.js';
+import { ENV, botLink } from './config.js';
 import * as db from './db.js';
 import * as np from './payments.js';
 import * as vip from './vip.js';
@@ -171,7 +171,13 @@ export function startServer() {
           kind: 'vip', source, signal_key: sigKey,
           ua: String(req.headers['user-agent'] || '').slice(0, 200),
         });
-        res.writeHead(302, { Location: ENV.vipInviteLink, 'Cache-Control': 'no-store' });
+        // Land in the BOT, never on an invite link: the checkout is the only way in.
+        const target = botLink('vip_' + source);
+        if (!target) {
+          return html(res, 503,
+            '<h3>One moment…</h3><p>Open Telegram and send <b>/vip</b> to the bot.</p>');
+        }
+        res.writeHead(302, { Location: target, 'Cache-Control': 'no-store' });
         return res.end();
       }
 

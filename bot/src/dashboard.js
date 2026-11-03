@@ -59,9 +59,12 @@ export async function aggregate({ force = false } = {}) {
   const pending = pays30.filter((p) => !p.credited && ['waiting', 'confirming', 'sending'].includes(p.status));
 
   // --- tıklamalar ---
-  const clicksToday = clicks7.filter((c) => Date.parse(c.created_at) >= d0);
+  // 'vip' = tapped the button in a channel · 'open' = actually opened the bot's VIP menu
+  const buttonClicks = clicks7.filter((c) => c.kind === 'vip');
+  const botOpens = clicks7.filter((c) => c.kind === 'open');
+  const clicksToday = buttonClicks.filter((c) => Date.parse(c.created_at) >= d0);
   const bySource = {};
-  clicks7.forEach((c) => { bySource[c.source || '?'] = (bySource[c.source || '?'] || 0) + 1; });
+  buttonClicks.forEach((c) => { bySource[c.source || '?'] = (bySource[c.source || '?'] || 0) + 1; });
 
   // --- abone sayısı + değişim ---
   const chanNow = {}, chanPrev = {};
@@ -131,10 +134,11 @@ export async function aggregate({ force = false } = {}) {
       freeUye: chanNow.free, freeOnceki: chanPrev.free,
       vipUye: chanNow.vip, vipOnceki: chanPrev.vip,
       tiklamaBugun: clicksToday.length,
-      tiklama7: clicks7.length,
+      tiklama7: buttonClicks.length,
+      botAcilis7: botOpens.length,
       tiklamaKaynak: bySource,
-      donusum7: clicks7.length
-        ? +((joinedToday.length / clicks7.length) * 100).toFixed(1) : null,
+      donusum7: buttonClicks.length
+        ? +((joinedToday.length / buttonClicks.length) * 100).toFixed(1) : null,
     },
     performans: {
       bugun: {
@@ -340,7 +344,7 @@ function render(d){
   $('#kkanal').innerHTML =
     K('free abone', c.freeUye ?? '—', delta(c.freeUye,c.freeOnceki), 'nt')
   + K('vip abone', c.vipUye ?? '—', delta(c.vipUye,c.vipOnceki), 'nt')
-  + K('vip tıklama bugün', c.tiklamaBugun, '7 günde '+c.tiklama7, c.tiklamaBugun>0?'up':'nt')
+  + K('vip tıklama bugün', c.tiklamaBugun, '7 günde '+c.tiklama7+' · bot açılışı '+(c.botAcilis7||0), c.tiklamaBugun>0?'up':'nt')
   + K('tıklama kaynağı',
       Object.keys(c.tiklamaKaynak).length
         ? Object.entries(c.tiklamaKaynak).sort((x,y)=>y[1]-x[1])[0][0]
