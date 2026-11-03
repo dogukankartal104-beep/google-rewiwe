@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+telegram-panel/ayarlar.json
+telegram-panel/*.session
+telegram-panel/*.session-journal
