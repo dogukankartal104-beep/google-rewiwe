@@ -271,7 +271,7 @@ test('branding does nothing in DRY_RUN', async () => {
 
 test('/start, /vip and /join are listed in the command menu and the help text', () => {
   const names = B.commandList('en').map((c) => c.command);
-  for (const c of ['start', 'vip', 'join', 'status', 'performance', 'how', 'language', 'id']) {
+  for (const c of ['start', 'vip', 'join', 'status', 'how', 'language', 'id']) {
     assert.ok(names.includes(c), `menu is missing /${c}`);
   }
   assert.match(M.startMsg('A', 'en'), /\/join/);

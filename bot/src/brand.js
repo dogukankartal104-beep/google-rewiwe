@@ -41,11 +41,11 @@ export const vipDescription = () =>
 export const botDescription = (lang = 'en') => (lang === 'tr'
   ? 'Crypto Pump Radar ödeme ve üyelik botu.\n\n' +
     '• /vip — planlar ve ödeme (kripto)\n• /join — üyeler için taze VIP daveti\n' +
-    '• /status — üyeliğin ne zaman bitiyor\n• /performance — net sonuçlar, kayıplar dahil\n' +
+    '• /status — üyeliğin ne zaman bitiyor\n' +
     '• /how — sistem işlemleri nasıl seçiyor\n\nYatırım tavsiyesi değildir.'
   : 'The checkout and control bot for Crypto Pump Radar.\n\n' +
     '• /vip — plans and payment (crypto)\n• /join — fresh VIP invite for members\n' +
-    '• /status — when your membership ends\n• /performance — net results, losses included\n' +
+    '• /status — when your membership ends\n' +
     '• /how — how the system picks trades\n\nNot financial advice.');
 
 export const botShortDescription = (lang = 'en') => (lang === 'tr'
@@ -58,7 +58,6 @@ export const commandList = (lang = 'en') => {
     ['vip', 'VIP plans and payment (crypto)'],
     ['join', 'Get a fresh VIP invite link (members)'],
     ['status', 'When does my membership end'],
-    ['performance', 'Net results of the last 30 days'],
     ['how', 'How the system picks trades'],
     ['language', 'Change language (EN / TR)'],
     ['id', 'Show my Telegram ID'],
@@ -68,7 +67,6 @@ export const commandList = (lang = 'en') => {
     ['vip', 'VIP planları ve ödeme (kripto)'],
     ['join', 'Taze VIP davet linki (üyeler)'],
     ['status', 'Üyeliğim ne zaman bitiyor'],
-    ['performance', 'Son 30 günün net sonuçları'],
     ['how', 'Sistem işlemleri nasıl seçiyor'],
     ['language', 'Dil değiştir (EN / TR)'],
     ['id', 'Telegram numaram'],

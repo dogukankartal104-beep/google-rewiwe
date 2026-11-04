@@ -136,18 +136,6 @@ async function handle(u, ctx) {
       return tg.send(from.id, M.statusMsg(v, lang));
     }
 
-    case '/performance':
-    case '/performans': {
-      const aktif = await vip.isActive(from.id);
-      const st = await perfLastDays(30);
-      const { text, reply_markup } = M.perfTable(st, {
-        title: M.L(lang, 'LAST 30 DAYS', 'SON 30 GÜN'),
-        periodLabel: M.L(lang, 'all closed trades · net', 'kapanan tüm işlemler · net'),
-        forFree: !aktif,
-      });
-      return tg.send(from.id, text, reply_markup ? { reply_markup } : {});
-    }
-
     case '/how':
     case '/nasil':
     case '/nasıl':
