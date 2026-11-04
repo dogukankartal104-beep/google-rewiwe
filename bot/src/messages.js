@@ -832,8 +832,8 @@ export function v1kWinner(row) {
   lines.push(`<i>${RISK}</i>`);
   return { text: lines.join('\n'), reply_markup: vipBtn('v1k', row.key || null) };
 }
-export function v1kResult(row) {
-  const v = row.variants.K1;
+export function v1kResult(row, variant = 'K1') {
+  const v = row.variants[variant];
   const win = v.net > 0;
   const lines = [];
   lines.push(`${win ? '✅' : '🔴'} <b>RESULT · ${sym(row.symbol)}</b> · SHORT`);
@@ -891,4 +891,27 @@ export function v1kWeekFree(symbols) {
   }
   lines.push('', 'This channel is our shop window. The live signals and the full weekly results are in VIP ⤵️', '', `<i>${RISK}</i>`);
   return { text: lines.join('\n'), reply_markup: vipBtn('week') };
+}
+
+
+/* v1p: the same idea as v1k, but the entry waits for a pullback from the high (the signal says "enter now"). */
+export function v1pSignal(row, entry, stop, exitAt) {
+  const f = row.features || {};
+  const D = entry >= 100 ? 2 : entry >= 1 ? 4 : entry >= 0.01 ? 5 : 7;
+  const p = (v) => fmt(v, D);
+  return [
+    '🔻 <b>EXTREME PUMP FADE · pullback entry</b>',
+    `🔻 <b>${sym(row.symbol)}</b> · SHORT`,
+    '',
+    `The pump has started to roll over. Entry: around <b>${p(entry)}</b> (now)`,
+    `Stop: <b>${p(stop)}</b> (+50% from the pump price)`,
+    `Exit: <b>${utc(exitAt)}</b> (24h from the first trigger), no take-profit`,
+    '',
+    `Why: <b>${pct(f.chg24)}</b> in 24h, <b>${pct(f.r15)}</b> in 15m, BTC weak (${pct(f.btc24)} / 24h), then a pullback from the high.`,
+    '',
+    '<b>Size: 1x leverage only, at most 5% of your account.</b> A stop-out costs about 2.5% of the account. A stop at +50% means 2x or more can be liquidated before it triggers.',
+    'Every VIP signal comes with entry, stop and exit time, the moment it fires. Every result is posted here, wins and losses. No guarantees: any trade can hit its stop.',
+    '',
+    `<i>${RISK}</i>`,
+  ].join('\n');
 }

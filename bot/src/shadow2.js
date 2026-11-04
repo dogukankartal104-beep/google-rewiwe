@@ -8,6 +8,10 @@ import { MARKET } from './scanner.js';
 import { log, warn } from './util.js';
 import { engineEntry, FILTER_OI15 } from '../bt/v1/engine.js';
 import { oiSeries, snapshot, scorecardText } from './shadow.js';
+import * as tg from './telegram.js';
+import * as M from './messages.js';
+import { levelChartPng, CHART_COLORS } from './chart.js';
+import { notifyAdmins } from './vip.js';
 
 const MIN = 6e4, HOUR = 36e5, DAY = 864e5;
 export const ENGINE = 'v1p';
@@ -82,6 +86,8 @@ async function resolveRow(row) {
   const [recs, fr] = await Promise.all([oiSeries(row.symbol, 60).catch(() => []), api('/fapi/v1/fundingRate', { symbol: row.symbol, startTime: tSig, limit: 20 }).catch(() => [])]);
   const funding = fr.map((x) => ({ t: +x.fundingTime, r: +x.fundingRate }));
   const variants = { ...row.variants };
+  const e2 = pullbackEntry(k, P_VARIANTS.P2.p);
+  if (typeof e2 === 'number' && e2 >= 0) await maybePublish(row, k, e2, tSig).catch((e) => warn(`v1p publish ${row.symbol}: ${e.message}`));
   for (const [name, c] of Object.entries(P_VARIANTS)) {
     if (!['open', 'pending'].includes(variants[name]?.state)) continue;
     const e = pullbackEntry(k, c.p);
@@ -109,10 +115,56 @@ async function resolveOpen() {
   }
 }
 
+/* ------------------------------------------------------------------ VIP publishing (variant P2, V1P_VIP=true)
+   Rules: only while no v1k position is open (the two engines must not stack), at most V1P_VIP_PER_DAY a day, only if the pullback entry
+   is fresh (it is a "now" signal), unknown open-interest data never published (P2 itself does not use the filter, but a signal needs data),
+   the shared kill switch (/v1k off) and an own auto-pause (last 10 published sum <= -30 points). DRY_RUN never records as published. */
+export function v1pGuard({ enabled, paused, v1kOpen, publishedToday, cap, entryAgeMs }) {
+  if (!enabled) return { ok: false, why: 'off' };
+  if (paused) return { ok: false, why: 'paused' };
+  if (v1kOpen) return { ok: false, why: 'a v1k position is open' };
+  if (publishedToday >= cap) return { ok: false, why: 'daily cap' };
+  if (!(entryAgeMs >= 0 && entryAgeMs <= 10 * MIN)) return { ok: false, why: 'entry is stale' };
+  return { ok: true };
+}
+const setPub = (id, patch) => db.q(`update shadow_engine set features = jsonb_set(features, '{pub}', coalesce(features->'pub','{}'::jsonb) || $2::jsonb) where id=$1`, [id, JSON.stringify(patch)]);
+
+async function maybePublish(row, k, entryIdx, tSig) {
+  if (!ENV.v1pVip || !ENV.postVip || !ENV.vipChat || row.features?.pub?.vip_at) return;
+  const day0 = new Date(); day0.setUTCHours(0, 0, 0, 0);
+  const [open1, today] = await Promise.all([
+    db.q("select 1 from shadow_engine where engine='v1k' and features->'pub'->>'vip_at' is not null and variants->'K1'->>'state'='open' limit 1"),
+    db.q("select count(*)::int as n from shadow_engine where engine=$1 and (features->'pub'->>'vip_at')::bigint >= $2", [ENGINE, day0.getTime()]),
+  ]);
+  const g = v1pGuard({ enabled: !(await db.getState('v1k:off', false)), paused: await db.getState('v1p:paused', false), v1kOpen: open1.length > 0, publishedToday: today[0]?.n || 0, cap: ENV.v1pVipPerDay, entryAgeMs: Date.now() - k[entryIdx].t });
+  if (!g.ok) { log(`v1p not published (${g.why}): ${row.symbol}`); return; }
+  const entry = k[entryIdx].o, stop = row.features.px * 1.5;
+  const png = await levelChartPng({ symbol: row.symbol, tag: 'SHORT SIGNAL', lines: [{ price: entry, label: 'ENTRY', color: CHART_COLORS.blue }, { price: stop, label: 'STOP', color: CHART_COLORS.dn }], badge: { big: 'SHORT', small: 'pullback entry · 1x only · max 5%', color: CHART_COLORS.dn }, foot: 'Not financial advice. Leveraged trading can lose your entire capital.' });
+  const msg = await tg.sendCard(ENV.vipChat, png, M.v1pSignal(row, entry, stop, tSig + DAY));
+  if (msg && !msg.dry) { await setPub(row.id, { vip_at: Date.now(), vip_msg: msg.message_id || null }); log(`v1p signal published to VIP: ${row.symbol}`); }
+}
+
+async function publishResults() {
+  if (!ENV.v1pVip && !ENV.postVip) return;
+  const rows = await db.q('select * from shadow_engine where engine=$1 order by sig_at asc limit 5000', [ENGINE]);
+  for (const r of rows) {
+    const pub = r.features?.pub || {}, v = r.variants?.P2;
+    if (!pub.vip_at || pub.vip_res || v?.state !== 'closed' || !ENV.vipChat) continue;
+    const msg = await tg.send(ENV.vipChat, M.v1kResult(r, 'P2').text, pub.vip_msg ? { reply_parameters: { message_id: pub.vip_msg, allow_sending_without_reply: true } } : {});
+    if (msg && !msg.dry) await setPub(r.id, { vip_res: Date.now() });
+  }
+  const nets = rows.filter((r) => r.features?.pub?.vip_at && r.variants?.P2?.state === 'closed').sort((a, b) => a.variants.P2.te - b.variants.P2.te).map((r) => r.variants.P2.net);
+  if (nets.length >= 10 && nets.slice(-10).reduce((a, b) => a + b, 0) <= -30 && !(await db.getState('v1p:paused', false))) {
+    await db.setState('v1p:paused', true);
+    await notifyAdmins(`⏸ v1p publishing paused automatically: the last 10 published v1p signals sum to ${nets.slice(-10).reduce((a, b) => a + b, 0).toFixed(1)} points. Review /karne p, then clear with /v1k resume.`);
+  }
+}
+
 export async function shadow2Tick() {
   if (!ENV.shadowOn || !db.dbReady()) return;
   try { await detect(); } catch (e) { warn('shadow v1p detect:', e.message); }
   try { await resolveOpen(); } catch (e) { warn('shadow v1p resolve:', e.message); }
+  try { await publishResults(); } catch (e) { warn('v1p results:', e.message); }
 }
 
 export async function shadow2Scorecard() {

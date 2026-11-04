@@ -134,3 +134,26 @@ test('v1p pullback confirmation: first close p below the running high, pending w
   assert.equal(pullbackEntry(k.slice(0, 2), 0.03), 'pending', 'not enough candles yet');
   assert.deepEqual(Object.keys(P_VARIANTS), ['P1', 'P2', 'P1F', 'P2F']);
 });
+
+import { v1pGuard } from '../src/shadow2.js';
+
+test('v1p VIP guard: never while a v1k position is open, daily cap, fresh entry only, kill switch and pause', () => {
+  const b = { enabled: true, paused: false, v1kOpen: false, publishedToday: 0, cap: 1, entryAgeMs: 2 * 60e3 };
+  assert.equal(v1pGuard(b).ok, true);
+  assert.equal(v1pGuard({ ...b, v1kOpen: true }).ok, false, 'the two engines must not stack');
+  assert.equal(v1pGuard({ ...b, publishedToday: 1 }).ok, false);
+  assert.equal(v1pGuard({ ...b, entryAgeMs: 20 * 60e3 }).ok, false, 'a stale entry is not a "now" signal');
+  assert.equal(v1pGuard({ ...b, entryAgeMs: -5 }).ok, false);
+  assert.equal(v1pGuard({ ...b, enabled: false }).ok, false);
+  assert.equal(v1pGuard({ ...b, paused: true }).ok, false);
+  assert.equal(ENV.v1pVip, false, 'off unless V1P_VIP=true');
+});
+
+test('v1p message: states entry now, stop from the pump price, exit time, 1x/5% and the result promise; no performance claims', () => {
+  const row = { symbol: 'FOOUSDT', sig_at: '2026-11-04T13:00:00Z', features: { px: 2, chg24: 80, r15: 6, btc24: -2 } };
+  const t = M.v1pSignal(row, 1.9, 3, Date.parse(row.sig_at) + 864e5);
+  assert.match(t, /pullback entry/); assert.match(t, /1\.9000/); assert.match(t, /3\.0000/); assert.match(t, /1x leverage only/);
+  assert.match(t, /Every result is posted here, wins and losses/); assert.ok(!/guaranteed|win rate|we make you|EXPERIMENTAL/i.test(t));
+  const r = M.v1kResult({ symbol: 'FOOUSDT', variants: { P2: { state: 'closed', net: -50.4, exit: 'stop' } } }, 'P2');
+  assert.match(r.text, /Stopped out/); assert.match(r.text, /-50\.4%/);
+});

@@ -249,7 +249,7 @@ export async function v1kControl(arg) {
   const a = String(arg || 'status').toLowerCase();
   if (a === 'off') { await db.setState('v1k:off', true); return '⏹ v1k showcase is OFF (recording continues).'; }
   if (a === 'on') { await db.setState('v1k:off', false); return `▶️ v1k showcase is ON${ENV.v1kPublish ? '' : ' (but V1K_PUBLISH=false in Railway, so it stays off)'}.`; }
-  if (a === 'resume') { await db.setState('v1k:paused', false); return '▶️ v1k auto-pause cleared.'; }
+  if (a === 'resume') { await db.setState('v1k:paused', false); await db.setState('v1p:paused', false); return '▶️ v1k and v1p auto-pause cleared.'; }
   const rows = await shadowRows();
   const shown = rows.filter((r) => r.features?.pub?.free_at);
   const hb = heartbeat.at ? `last 15m check ${new Date(heartbeat.at).toISOString().slice(11, 16)} UTC: ${heartbeat.candidates} coin(s) up 40%+ in 24h, ${heartbeat.checked} checked, ${heartbeat.fired} fired` : 'no 15m check yet since the last restart (the first one runs at the next quarter hour)';
