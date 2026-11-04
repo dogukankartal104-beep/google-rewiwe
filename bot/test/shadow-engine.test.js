@@ -104,3 +104,7 @@ test('FADE engine is recorded but not published; v1k is the VIP engine', async (
   // a never-published signal produces no result post
   await publishResult({ symbol: 'FOOUSDT', key: 'k', vip_msg_id: null, free_posted_at: null });
 });
+
+test('education: free only, every second day by default', () => {
+  assert.equal(ENV.eduEveryDays, 2);
+});

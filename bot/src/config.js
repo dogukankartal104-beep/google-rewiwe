@@ -128,7 +128,7 @@ export const ENV = {
   // --- eğitim içeriği ---
   eduOn: bool('EDU_ON', true),
   eduHour: Number(str('EDU_HOUR', '13')),         // TR saati
-  eduEveryDays: Number(str('EDU_EVERY_DAYS', '1')), // kaç günde bir (1 = her gün)
+  eduEveryDays: Number(str('EDU_EVERY_DAYS', '2')), // free education cadence in days (2 = every other day)
 
   // --- Railway tasarruf (eco) ---
   ecoOn: bool('ECO_MODE', true),

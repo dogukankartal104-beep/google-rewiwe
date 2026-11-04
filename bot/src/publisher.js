@@ -362,9 +362,9 @@ export async function publishEducation() {
   const { LESSONS } = await import('./lessons.js');
   let n = 0;
 
+  // Education goes to the FREE channel only (VIP is not sent lessons). Cadence: EDU_EVERY_DAYS (default every 2 days).
   for (const [channel, chatId, forFree] of [
     ['free', ENV.freeChat, true],
-    ['vip', ENV.vipChat, false],
   ]) {
     if (!chatId) continue;
     if (channel === 'free' && !ENV.postFree) continue;
@@ -382,9 +382,7 @@ export async function publishEducation() {
       }
       const lesson = LESSONS[idx];
 
-      const { text, reply_markup } = M.eduPost(lesson, {
-        forFree, idx: idx + 1, total: LESSONS.length,
-      });
+      const { text, reply_markup } = M.eduPost(lesson, { forFree });
       const msg = await tg.send(chatId, text, reply_markup ? { reply_markup } : {});
       if (!kuru(msg)) await db.eduAdd(lesson.id, channel, msg?.message_id ?? null);
       n++;

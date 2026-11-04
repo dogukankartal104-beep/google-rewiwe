@@ -694,17 +694,17 @@ export function howMsg(lang = 'en') {
 /* ============================================================
    EDUCATION
    ============================================================ */
-export function eduPost(lesson, { forFree = false, idx = null, total = null } = {}) {
+export function eduPost(lesson, { forFree = false } = {}) {
   const lines = [];
   lines.push(`📚 <b>${lesson.title}</b>`);
-  lines.push(`<i>${lesson.tag}${idx && total ? ` · lesson ${idx}/${total}` : ''}</i>`);
+  lines.push(`<i>${lesson.tag}</i>`);
   lines.push('');
   lines.push(lesson.body);
 
   if (forFree) {
     lines.push('');
     lines.push('—');
-    lines.push('Tracking these checks by hand across 400+ pairs is not possible.');
+    lines.push('Tracking these checks by hand across the whole market is not possible.');
     lines.push('The system scans them 24/7 and only speaks when all three phases line up ⤵️');
     return { text: lines.join('\n'), reply_markup: vipBtn('edu') };
   }

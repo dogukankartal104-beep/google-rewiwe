@@ -213,9 +213,10 @@ test('eduPost: free sürümünde VIP çağrısı var, VIP sürümünde yok', () 
   assert.ok(!/Join VIP/.test(vip.text));
 });
 
-test('eduPost: ders numarası gösterilir', () => {
-  const { text } = M.eduPost(LESSONS[0], { forFree: false, idx: 3, total: 25 });
-  assert.match(text, /lesson 3\/25/);
+test('eduPost: no lesson counters or invented numbers in the post', () => {
+  const { text } = M.eduPost(LESSONS[0], { forFree: true, idx: 3, total: 25 });
+  assert.ok(!/lesson \d+\s*\/\s*\d+|\d+\/\d+ lesson|400\+/i.test(text));
+  assert.match(text, /whole market/);
 });
 
 test('lessonById çalışır', () => {
