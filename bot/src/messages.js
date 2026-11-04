@@ -755,7 +755,7 @@ export function newsFlash(item, ctx = {}, { forFree = false } = {}) {
         : 'normal operation. A headline changes no rule; a setup still needs all three phases.'));
     lines.push('');
   } else {
-    lines.push('VIP members also get how to trade around the story, the live market state and our open book ⤵️');
+    lines.push('This channel is our shop window. VIP gets the full picture: how to trade around every story, the live market state and our open book. Come join us ⤵️');
     lines.push('');
   }
   if (item.lang === 'tr') { lines.push('<i>Headline kept in the source language to avoid translation drift.</i>'); lines.push(''); }
@@ -826,7 +826,7 @@ export function v1kShowcase(row, profitPct) {
   lines.push(`The coin had already pumped hard, BTC was weak and new open interest was drying up when the system took the short around <b>${fmt(f.px, D)}</b>.`);
   lines.push(`It is currently <b>+${fmt(profitPct, 1)}%</b> in profit and still open. The result will be posted when it closes, whatever it is.`);
   lines.push('');
-  lines.push('VIP members get more tools, analysis and the system\'s live signals ⤵️');
+  lines.push('This channel is our shop window. VIP is where the full plans and the live signals are. Come join us ⤵️');
   lines.push('');
   lines.push(`<i>${SHOWCASE_NOTE}</i>`);
   lines.push(`<i>${RISK}</i>`);

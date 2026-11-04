@@ -8,6 +8,7 @@ import { MARKET } from './scanner.js';
 import { log, warn } from './util.js';
 import * as tg from './telegram.js';
 import * as M from './messages.js';
+import { profitChartPng } from './chart.js';
 import { notifyAdmins } from './vip.js';
 import { engineEntry, FILTER_OI15, VARIANTS } from '../bt/v1/engine.js';
 import { mtfFeatures } from '../bt/v1/mtf.js';
@@ -231,7 +232,8 @@ async function publishResults() {
     if (d.act === 'skip') { await setPub(r.id, { skip: d.why }); continue; }
     if (d.act !== 'post') continue;
     const m = M.v1kShowcase(r, profit);
-    const msg = await tg.send(ENV.freeChat, m.text, { reply_markup: m.reply_markup });
+    const png = await profitChartPng({ symbol: r.symbol, tf: '15m', dir: 'S', entry: r.features.px, now: r.features.px * (1 - profit / 100), stop: r.features.px * 1.5, profitText: `+${profit.toFixed(1)}%`, small: 'SHORT · IN PROFIT' });
+    const msg = await tg.sendCard(ENV.freeChat, png, m.text, { reply_markup: m.reply_markup });
     if (msg && !msg.dry) { await setPub(r.id, { free_at: Date.now(), free_px: profit }); shownToday++; log(`v1k showcase → free: ${r.symbol} (+${profit.toFixed(1)}% in profit)`); }
   }
   const nets = rows.filter((x) => x.features?.F === true && x.variants?.K1?.state === 'closed').sort((a, b) => a.variants.K1.te - b.variants.K1.te).map((x) => x.variants.K1.net);

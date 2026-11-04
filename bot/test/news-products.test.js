@@ -41,7 +41,7 @@ test('VIP flash has the desk view; the free one does not', () => {
   assert.match(free.text, /What could happen/, 'free still gets the plain-language explanation');
   assert.ok(!/Open book|System stance|Named in the story/.test(free.text), 'no live book details for free');
   assert.ok(!free.text.includes(N.TIPS.SECURITY.slice(0, 40)), 'the tip is a VIP perk');
-  assert.match(free.text, /VIP members also get how to trade around the story/);
+  assert.match(free.text, /shop window.*how to trade around every story/);
   assert.ok(free.reply_markup?.inline_keyboard?.[0]?.[0]?.url, 'free story links to VIP');
 });
 

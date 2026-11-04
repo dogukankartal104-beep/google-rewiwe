@@ -115,10 +115,10 @@ test('scoreItem: büyük isim geçiyorsa puan artar', () => {
   assert.ok(ile.score > siz.score, 'BTC geçen haber daha çok ilgi görür');
 });
 
-test('scoreItem: İngilizce kaynak Türkçeye göre dezavantajlı', () => {
+test('scoreItem: language does not change the score (channels are English only, no source preference)', () => {
   const tr = scoreItem('SEC dava açtı', { lang: 'tr' });
   const en = scoreItem('SEC dava açtı', { lang: 'en' });
-  assert.ok(tr.score > en.score, 'Türkçe kaynak tercih edilmeli');
+  assert.equal(tr.score, en.score);
 });
 
 test('scoreItem: birden fazla kural eşleşirse puanlar toplanır', () => {
@@ -145,10 +145,10 @@ test('puanlama sıralaması mantıklı: hack > makro > listeleme > genel', () =>
 });
 
 /* ======================= KAYNAK LİSTESİ ======================= */
-test('feeds: varsayılanlar var ve Türkçe kaynaklar öncelikli', () => {
+test('feeds: defaults are English-only so nothing in another language can be posted', () => {
   const f = feeds();
-  assert.ok(f.length >= 4);
-  assert.ok(f.filter((x) => x.lang === 'tr').length >= 3, 'çoğunluk Türkçe olmalı');
+  assert.ok(f.length >= 5);
+  assert.ok(f.every((x) => x.lang === 'en'), 'only English sources by default');
   f.forEach((x) => {
     assert.match(x.url, /^https:\/\//, 'kaynak https olmalı: ' + x.url);
     assert.ok(x.name, 'kaynak adı olmalı');

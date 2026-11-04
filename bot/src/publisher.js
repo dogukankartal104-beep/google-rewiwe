@@ -10,6 +10,7 @@ import { noteMacroNews, macroRisk } from './macro.js';
 import { activeCount } from './vip.js';
 import { gradeAtLeast } from './config.js';
 import { log, warn, trDate, trShort, trDayStart } from './util.js';
+import { signalChartPng, profitChartPng, newsCardPng } from './chart.js';
 
 /* ---------------- dönem anahtarları ---------------- */
 export const dayKey = (t = Date.now()) => {
@@ -37,7 +38,7 @@ export function weekKey(t = Date.now()) {
 export async function publishSignal(sig) {
   if (!ENV.postVip || !ENV.vipChat) return;
   try {
-    const msg = await tg.send(ENV.vipChat, M.vipSignal(sig));
+    const msg = await tg.sendCard(ENV.vipChat, await signalChartPng(sig), M.vipSignal(sig));
     if (msg?.message_id) await db.patchSignal(sig.key, { vip_msg_id: msg.message_id });
     log(`VIP'e yayınlandı: ${sig.symbol} ${sig.dir}`);
   } catch (e) {
@@ -62,6 +63,15 @@ export async function publishSignal(sig) {
    bir daha hic gonderilmez — kimsenin gormedigi icerik yanmis olur.
    Bu yuzden kuru gonderimlerde tekillik kayitlari YAZILMAZ. */
 const kuru = (msg) => Boolean(msg && msg.dry);
+
+/* Profit image for a showcased FADE position: entry, stop, targets and the current price over the recent candles. */
+async function showcasePng(s) {
+  const long = s.dir === 'L', px = Number(s.last_px), en = Number(s.entry);
+  if (!(px > 0) || !(en > 0)) return null;
+  const move = (long ? px - en : en - px) / en * 100;
+  return profitChartPng({ symbol: s.symbol, tf: s.tf || '15m', dir: s.dir, entry: en, now: px, stop: s.stop, targets: [s.tp1, s.tp2].filter(Number.isFinite),
+    profitText: `${move >= 0 ? '+' : ''}${move.toFixed(1)}%`, small: s.open_r != null ? `${s.open_r >= 0 ? '+' : ''}${Number(s.open_r).toFixed(1)}R · IN PROFIT` : 'IN PROFIT' });
+}
 
 const fmtR = (v) => `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}R`;
 
@@ -140,7 +150,8 @@ export async function publishPendingFree() {
         ? M.resultCard(s, { forFree: true })
         : M.freeShowcase(s, score);
 
-      const msg = await tg.send(ENV.freeChat, text, { reply_markup });
+      const png = kind === 'result' ? null : await showcasePng(s);
+      const msg = await tg.sendCard(ENV.freeChat, png, text, { reply_markup });
       if (!kuru(msg)) {
         await db.patchSignal(s.key, {
           free_msg_id: msg?.message_id ?? null,
@@ -469,7 +480,7 @@ export async function publishBreakingNews() {
     if (item) {
       try {
         const { text } = M.newsFlash(item, await newsContext(item, news), { forFree: false });
-        const msg = await tg.send(ENV.vipChat, text);
+        const msg = await tg.sendCard(ENV.vipChat, await newsCardPng(item, 'just now'), text);
         if (!kuru(msg)) {
           const row = {
             uid: item.uid, title: item.title, url: item.url, source: item.source, score: item.score,
@@ -494,7 +505,7 @@ export async function publishBreakingNews() {
     if (item) {
       try {
         const { text, reply_markup } = M.newsFlash(item, {}, { forFree: true });
-        const msg = await tg.send(ENV.freeChat, text, { reply_markup });
+        const msg = await tg.sendCard(ENV.freeChat, await newsCardPng(item, 'just now'), text, { reply_markup });
         if (!kuru(msg)) {
           const row = {
             uid: item.uid + '-f', title: item.title, url: item.url, source: item.source, score: item.score,

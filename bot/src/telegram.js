@@ -75,6 +75,33 @@ export async function send(chatId, text, opts = {}) {
   });
 }
 
+/* Photo + text. The text becomes the caption when it fits (Telegram allows 1024 characters), otherwise it follows as a
+   normal message. Any failure falls back to the plain text post, so an image problem can never stop a post. */
+export async function sendCard(chatId, png, text, opts = {}) {
+  if (!png) return send(chatId, text, opts);
+  if (!chatId) throw new Error('chat id yok');
+  if (ENV.dryRun && isChannel(chatId)) { log(`[DRY_RUN] -> ${chatId} [image ${png.length} bytes]\n${text}\n---`); return { message_id: 0, dry: true }; }
+  const caption = text.length <= 1000;
+  try {
+    const gap = MIN_GAP - (Date.now() - lastSend);
+    if (gap > 0) await sleep(gap);
+    lastSend = Date.now();
+    const fd = new FormData();
+    fd.append('chat_id', String(chatId));
+    fd.append('photo', new Blob([png], { type: 'image/png' }), 'card.png');
+    if (caption) { fd.append('caption', text); fd.append('parse_mode', 'HTML'); if (opts.reply_markup) fd.append('reply_markup', JSON.stringify(opts.reply_markup)); }
+    if (ENV.vipProtect && ENV.vipChat && String(chatId) === String(ENV.vipChat)) fd.append('protect_content', 'true');
+    const r = await fetch(`${API()}/sendPhoto`, { method: 'POST', body: fd, signal: AbortSignal.timeout(30000) });
+    const j = await r.json().catch(() => null);
+    if (!j?.ok) throw new Error(j?.description || `HTTP ${r.status}`);
+    if (caption) return j.result;
+    return send(chatId, text, opts);                       // long text: photo first, then the text with its buttons
+  } catch (e) {
+    warn(`sendPhoto failed, posting text only: ${e.message}`);
+    return send(chatId, text, opts);
+  }
+}
+
 export const edit = (chatId, messageId, text, opts = {}) =>
   call('editMessageText', {
     chat_id: chatId, message_id: messageId, text,

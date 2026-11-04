@@ -17,13 +17,16 @@ import * as db from './db.js';
 /* ---------------- KAYNAKLAR ----------------
    NEWS_FEEDS env'i ile tamamen değiştirilebilir (virgülle ayrılmış URL listesi).
    lang: 'tr' olanlar tercih edilir. */
+// Channels are fully English: only English sources are collected by default (Turkish feeds can still be set with NEWS_FEEDS
+// for the admin tools, but they are never posted).
 const DEFAULT_FEEDS = [
-  { url: 'https://kriptokoin.com/feed/', name: 'Kriptokoin', lang: 'tr' },
-  { url: 'https://coin-turk.com/feed', name: 'CoinTürk', lang: 'tr' },
-  { url: 'https://uzmancoin.com/feed/', name: 'Uzmancoin', lang: 'tr' },
-  { url: 'https://www.bitcoinsistemi.com/feed/', name: 'Bitcoin Sistemi', lang: 'tr' },
   { url: 'https://cointelegraph.com/rss', name: 'Cointelegraph', lang: 'en' },
   { url: 'https://decrypt.co/feed', name: 'Decrypt', lang: 'en' },
+  { url: 'https://www.coindesk.com/arc/outboundfeeds/rss/', name: 'CoinDesk', lang: 'en' },
+  { url: 'https://www.theblock.co/rss.xml', name: 'The Block', lang: 'en' },
+  { url: 'https://bitcoinmagazine.com/feed', name: 'Bitcoin Magazine', lang: 'en' },
+  { url: 'https://cryptoslate.com/feed/', name: 'CryptoSlate', lang: 'en' },
+  { url: 'https://cryptonews.com/news/feed/', name: 'Cryptonews', lang: 'en' },
 ];
 
 export function feeds() {
@@ -154,7 +157,6 @@ export function scoreItem(title, { lang = 'tr' } = {}) {
     }
   }
   if (score && BIG.test(t)) score += 10;      // büyük isim geçiyorsa daha çok ilgi görür
-  if (lang === 'en') score -= 8;              // Türkçe kaynak tercih edilir
   return { score, tags, why, tip: TIPS[tags[0]] || null, what: WHAT[tags[0]] || null };
 }
 
@@ -236,8 +238,8 @@ async function fetchFeed(f) {
 }
 
 /* Son N saatteki haberleri topla, puanla, sırala. */
-export async function collect({ hours = 6 } = {}) {
-  const list = feeds();
+export async function collect({ hours = 6, english = true } = {}) {
+  const list = feeds().filter((f) => !english || f.lang === 'en');
   const all = (await Promise.all(list.map(fetchFeed))).flat();
   const since = Date.now() - hours * 3600e3;
   const seen = new Set();

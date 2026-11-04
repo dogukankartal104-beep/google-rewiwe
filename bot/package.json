@@ -17,6 +17,7 @@
     "ws": "^8.22.1"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
     "pg": "8.13.1"
   }
 }
