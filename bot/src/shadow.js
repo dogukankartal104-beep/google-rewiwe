@@ -94,13 +94,15 @@ async function snapshot(sym, m, b) {
 }
 
 let lastBoundaryMem = 0;
+const heartbeat = { at: 0, boundary: 0, candidates: 0, checked: 0, fired: 0, late: false };   // shown in /v1k status so a quiet day can be told from a broken detector
 async function detect() {
   const b = Math.floor(Date.now() / M15) * M15;
   const last = lastBoundaryMem || await db.getState('shadow:v1k:last', 0);
   if (b <= last) return;
   lastBoundaryMem = b; await db.setState('shadow:v1k:last', b);
-  if (Date.now() - b > 12 * 60e3) { log('shadow: 15m boundary missed (late start), skipping'); return; }
+  if (Date.now() - b > 12 * 60e3) { log('shadow: 15m boundary missed (late start), skipping'); heartbeat.late = true; return; }
   const cands = MARKET.tick.filter((x) => x.c >= 40 && x.v >= 1e6).sort((a, c) => c.c - a.c).slice(0, 40);
+  Object.assign(heartbeat, { at: Date.now(), boundary: b, candidates: cands.length, checked: 0, fired: 0, late: false });
   if (!cands.length) return;
   const btc = (await klines('BTCUSDT', '15m', 110, { endTime: b - 1 })).filter((x) => x.t + M15 <= b);
   for (const t of cands) {
@@ -108,6 +110,7 @@ async function detect() {
       const k = (await klines(t.s, '15m', 110, { endTime: b - 1 })).filter((x) => x.t + M15 <= b);
       if (!k.length || k[k.length - 1].t !== b - M15) continue;
       const m = v1kCheck(k, btc);
+      heartbeat.checked++;
       if (!v1kTriggers(m)) continue;
       const rec = (await db.q('select sig_at from shadow_engine where engine=$1 and symbol=$2 order by sig_at desc limit 1', [ENGINE, t.s]))[0];
       if (rec && b - Date.parse(rec.sig_at) < 4 * HOUR) continue;                  // 4 hour cooldown per coin
@@ -116,6 +119,7 @@ async function detect() {
       await db.q(`insert into shadow_engine (key, engine, symbol, sig_at, features, variants) values ($1,$2,$3,$4,$5,$6) on conflict (key) do nothing`,
         [`${ENGINE}|${t.s}|${b}`, ENGINE, t.s, new Date(b).toISOString(), feat, variants]);
       publishNew(`${ENGINE}|${t.s}|${b}`).catch((e) => warn(`v1k publish ${t.s}: ${e.message}`));
+      heartbeat.fired++;
       log(`shadow v1k signal ${t.s}: 15m ${m.r15.toFixed(1)}% · 24h ${m.chg24.toFixed(0)}% · BTC24 ${m.btc24.toFixed(1)}% · oi15 ${feat.oi15 === null ? '—' : feat.oi15.toFixed(1)}% · filter ${feat.F}`);
     } catch (e) { warn(`shadow v1k ${t.s}: ${e.message}`); }
   }
@@ -248,5 +252,6 @@ export async function v1kControl(arg) {
   if (a === 'resume') { await db.setState('v1k:paused', false); return '▶️ v1k auto-pause cleared.'; }
   const rows = await shadowRows();
   const shown = rows.filter((r) => r.features?.pub?.free_at);
-  return `v1k free (closed winners only): ${(await publishEnabled()) ? 'ON' : 'OFF'} · VIP engine (instant signals): ${ENV.v1kVip ? 'ON' : 'off'}, at most ${ENV.v1kVipPerDay}/day · FADE publishing: ${ENV.fadePublish ? 'ON' : 'off'} · auto-pause: ${(await db.getState('v1k:paused', false)) ? 'PAUSED' : 'clear'} · DRY_RUN: ${ENV.dryRun ? 'ON (nothing is sent to channels)' : 'off'}\nRecorded ${rows.length}, shown in free (winners) ${shown.length}.\n/v1k on | off | resume · /karne (full record, every signal)`;
+  const hb = heartbeat.at ? `last 15m check ${new Date(heartbeat.at).toISOString().slice(11, 16)} UTC: ${heartbeat.candidates} coin(s) up 40%+ in 24h, ${heartbeat.checked} checked, ${heartbeat.fired} fired` : 'no 15m check yet since the last restart (the first one runs at the next quarter hour)';
+  return `${hb}\n` + `v1k free (closed winners only): ${(await publishEnabled()) ? 'ON' : 'OFF'} · VIP engine (instant signals): ${ENV.v1kVip ? 'ON' : 'off'}, at most ${ENV.v1kVipPerDay}/day · FADE publishing: ${ENV.fadePublish ? 'ON' : 'off'} · auto-pause: ${(await db.getState('v1k:paused', false)) ? 'PAUSED' : 'clear'} · DRY_RUN: ${ENV.dryRun ? 'ON (nothing is sent to channels)' : 'off'}\nRecorded ${rows.length}, shown in free (winners) ${shown.length}.\n/v1k on | off | resume · /karne (full record, every signal)`;
 }
