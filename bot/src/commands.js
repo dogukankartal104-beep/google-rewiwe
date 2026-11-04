@@ -13,6 +13,7 @@ import {
 } from './publisher.js';
 import { MARKET, buildRow } from './scanner.js';
 import { shadowReport } from './tracker.js';
+import { makeLoginToken } from './dashauth.js';
 import { runBacktest, backtestRunning } from './backtest.js';
 import { fmt, log, warn, trDateTime, dur, trDayStart } from './util.js';
 
@@ -386,10 +387,10 @@ async function adminCmd(cmd, args, from, ctx) {
           'Dashboard açık ama <code>PUBLIC_URL</code> ayarlı değil — linki üretemiyorum.');
         return true;
       }
-      const u = `${ENV.publicUrl}/dash?key=${encodeURIComponent(ENV.dashKey)}`;
+      const u = `${ENV.publicUrl}/dash?t=${makeLoginToken(ENV.dashKey)}`;
       await tg.send(from.id,
-        `📊 <b>Panel</b>\n\n<a href="${u}">${u}</a>\n\n` +
-        '<i>Bu link anahtarını içeriyor — kimseyle paylaşma.</i>');
+        `📊 <b>Dashboard</b>\n\n<a href="${u}">Open the dashboard</a>\n\n` +
+        '<i>Single-use link, valid for 5 minutes. It signs this browser in for 12 hours; your key is never in the link.</i>');
       return true;
     }
 

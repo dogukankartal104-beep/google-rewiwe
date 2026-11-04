@@ -172,7 +172,7 @@ async function main() {
   log(`risk %${CFG.riskPct} · max ${CFG.maxOpen} pozisyon · gün limiti ${CFG.dailyStopR}R`);
   log(`free: gecikme ${ENV.freeDelayMin}dk · günde ${ENV.freePerDay} sinyal · ${ENV.freeOnlyWinning ? `sadece kazanan (min +${ENV.freeMinOpenR}R)` : 'hepsi'} · min sınıf ${ENV.minGradeFree}`);
   log(`VIP min sınıf ${ENV.minGradeVip} · eğitim ${ENV.eduOn ? `açık (saat ${ENV.eduHour})` : 'kapalı'} · eco ${ENV.ecoOn ? `açık (×${ENV.ecoFactor})` : 'kapalı'}`);
-  log(`dashboard: ${ENV.dashKey ? (ENV.publicUrl ? ENV.publicUrl + '/dash?key=***' : 'PUBLIC_URL yok') : 'kapalı (DASHBOARD_KEY yok)'}`);
+  log(`dashboard: ${ENV.dashKey ? (ENV.publicUrl ? ENV.publicUrl + '/dash (sign-in required)' : 'PUBLIC_URL yok') : 'kapalı (DASHBOARD_KEY yok)'}`);
   if (ENV.dryRun) log('⚠️ DRY_RUN açık — Telegram\'a hiçbir şey gönderilmeyecek');
 
   if (ARG.has('--selftest')) { await selftest(); return; }

@@ -503,8 +503,10 @@ never granted automatically; they alert the admins instead.
 **The public endpoints** (`/ipn/nowpayments`, `/go/vip`, `/dash`) are size-capped and rate-limited.
 Garbage requests are dropped quietly and never reach the admins; alerts only fire for things that
 involve a real payment, and each alert is throttled. The dashboard key is compared in constant time,
-a client is locked out after 10 wrong tries, and the page sets `Referrer-Policy: no-referrer` so the
-key in its URL cannot leak.
+a client is locked out after 10 wrong tries. The key is never put in a URL: you sign in through a form,
+or with the single-use, 5-minute link the `/dash` command sends in Telegram, and the browser then holds a
+signed `HttpOnly; Secure; SameSite=Strict` cookie (12 hours). Changing `DASHBOARD_KEY` logs everyone out.
+The page ships a strict Content-Security-Policy, `no-store` and `noindex`.
 
 **Secrets** live only in Railway variables. The repository and its full git history contain none.
 Treat `TELEGRAM_BOT_TOKEN`, `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET`, `DASHBOARD_KEY` and

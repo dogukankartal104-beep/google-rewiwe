@@ -300,7 +300,6 @@ tr:hover td{background:#111a23}
 <div class="warn" id="notes"></div></div>
 
 <script>
-const KEY = new URLSearchParams(location.search).get('key') || '';
 const $ = s => document.querySelector(s);
 const f = (v,d=2) => (v===null||v===undefined||isNaN(v)) ? '—' : Number(v).toFixed(d);
 const sgn = (v,d=2) => (v===null||v===undefined||isNaN(v)) ? '—' : (v>0?'+':'')+Number(v).toFixed(d);
@@ -319,7 +318,8 @@ const K = (u,b,s,c) => '<div class="k"><u>'+u+'</u><b class="'+(c||'nt')+'">'+b+
 
 async function load(){
   try{
-    const r = await fetch('/api/dash?key='+encodeURIComponent(KEY));
+    const r = await fetch('/api/dash', {credentials:'same-origin'});
+    if(r.status===401){ location.href='/dash'; return; }
     if(!r.ok){ throw new Error('yetki yok veya sunucu hatası ('+r.status+')'); }
     render(await r.json());
     $('#err').style.display='none';

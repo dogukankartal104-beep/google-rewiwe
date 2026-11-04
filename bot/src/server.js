@@ -9,6 +9,7 @@ import { ENV, botLink } from './config.js';
 import * as db from './db.js';
 import * as np from './payments.js';
 import * as dash from './dashboard.js';
+import * as auth from './dashauth.js';
 import { processIpn, IpnIgnored, IpnTemporary, alertAdmins } from './ipn.js';
 import { makeLimiter, makeFailGuard, clientIp } from './ratelimit.js';
 import { log, warn, err } from './util.js';
@@ -106,27 +107,58 @@ export function startServer() {
       }
 
       // ---- dashboard (owner only) ----
-      if (path === '/dash' || path === '/api/dash') {
+      // Auth: signed HttpOnly cookie. The key is typed into a form (POST) or arrives as a single-use,
+      // 5-minute token from the Telegram /dash command. It is never accepted in a query string.
+      if (path === '/dash' || path === '/api/dash' || path === '/dash/login' || path === '/dash/logout') {
         if (!ENV.dashKey) return html(res, 404, '<h3>Dashboard is off</h3>');
-        if (dashGuard.blocked(ip)) return json(res, 429, { error: 'too many attempts, try again later' });
-        if (!dash.keyOk(url.searchParams.get('key'))) {
-          dashGuard.fail(ip);
-          return path === '/api/dash' ? json(res, 403, { error: 'forbidden' }) : html(res, 403, '<h3>No access</h3>');
-        }
-        dashGuard.reset(ip);
+        const noStore = { ...SECURITY_HEADERS, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' };
+        const authed = () => auth.checkSession(ENV.dashKey, auth.parseCookies(req.headers.cookie).dash);
+        const page = (code, body, extra = {}) => {
+          res.writeHead(code, { ...noStore, 'Content-Type': 'text/html; charset=utf-8', ...extra });
+          res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Dashboard</title><body style="font-family:system-ui;background:#0b0f14;color:#dbe5f0;display:grid;place-items:center;height:100vh;margin:0;text-align:center;padding:20px"><div>${body}</div></body>`);
+        };
 
-        if (path === '/dash') {
+        if (path === '/dash/logout') {
+          res.writeHead(302, { ...noStore, 'Set-Cookie': auth.clearCookie(), Location: '/dash' });
+          return res.end();
+        }
+
+        if (path === '/dash/login') {
+          if (req.method !== 'POST') return page(405, auth.loginPage());
+          if (dashGuard.blocked(ip)) return page(429, auth.loginPage('Too many attempts. Try again in a few minutes.'));
+          const form = new URLSearchParams(await readBody(req));
+          const okKey = dash.keyOk(form.get('key'));
+          const okTok = !okKey && auth.checkLoginToken(ENV.dashKey, form.get('t'), Date.now(), { consume: true });
+          if (!okKey && !okTok) {
+            dashGuard.fail(ip);
+            return page(403, auth.loginPage('Wrong key or expired link.'));
+          }
+          dashGuard.reset(ip);
+          res.writeHead(302, { ...noStore, 'Set-Cookie': auth.sessionCookie(auth.makeSession(ENV.dashKey)), Location: '/dash' });
+          return res.end();
+        }
+
+        if (path === '/api/dash') {
+          if (!authed()) return json(res, 401, { error: 'sign in required' });
+          const data = await dash.aggregate();
+          res.writeHead(200, { ...noStore, 'Content-Type': 'application/json; charset=utf-8' });
+          return res.end(JSON.stringify(data));
+        }
+
+        // GET /dash
+        if (authed()) {
           res.writeHead(200, {
-            ...SECURITY_HEADERS,
+            ...noStore,
             'Content-Type': 'text/html; charset=utf-8',
-            'Cache-Control': 'no-store',
-            'X-Robots-Tag': 'noindex, nofollow',
+            'Content-Security-Policy': "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
           });
           return res.end(dash.dashHtml());
         }
-        const data = await dash.aggregate();
-        res.writeHead(200, { ...SECURITY_HEADERS, 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
-        return res.end(JSON.stringify(data));
+        // A Telegram link carries ?t=<single-use token>. Opening it only shows a button, so link
+        // previews and scanners that merely fetch the URL cannot use the token up.
+        const tok = url.searchParams.get('t');
+        if (tok && auth.checkLoginToken(ENV.dashKey, tok)) return page(200, auth.loginPage('', tok));
+        return page(200, auth.loginPage());
       }
 
       // pages NOWPayments sends the customer back to

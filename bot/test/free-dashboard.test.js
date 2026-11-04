@@ -278,7 +278,8 @@ test('dashHtml: geçerli HTML, anahtarı gömmez, beklenen bölümler var', () =
   ].forEach((k) => assert.ok(h.includes(k), 'eksik bölüm: ' + k));
 
   // arama motorlarına kapalı olduğunu belirten uç sunucuda; sayfada veri çekme var
-  assert.match(h, /\/api\/dash\?key=/);
+  assert.match(h, /fetch\('\/api\/dash', \{credentials:'same-origin'\}\)/);
+  assert.ok(!/api\/dash\?key=/.test(h), 'the key must not travel in a URL');
   assert.match(h, /setInterval\(load, 60000\)/, '60 sn\'de bir yenilemeli');
 });
 

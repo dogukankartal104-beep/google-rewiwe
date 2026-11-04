@@ -355,21 +355,26 @@ test('/ipn is rate limited per client', async () => {
 test('dashboard: wrong keys lock the client out, even for the right key, until the window passes', async () => {
   const KEY = 'a-long-random-dashboard-key-0123456789';
   await serve({ dashKey: KEY }, async (base) => {
-    const h = { 'x-forwarded-for': '7.7.7.7' };
-    assert.equal((await fetch(`${base}/api/dash?key=${KEY}`, { headers: h })).status, 200, 'right key works');
-    for (let i = 0; i < 10; i++) {
-      assert.equal((await fetch(`${base}/api/dash?key=wrong${i}`, { headers: h })).status, 403);
-    }
-    assert.equal((await fetch(`${base}/api/dash?key=wrong-again`, { headers: h })).status, 429, 'locked out');
-    assert.equal((await fetch(`${base}/api/dash?key=${KEY}`, { headers: h })).status, 429, 'even the right key, while locked');
-    assert.equal((await fetch(`${base}/api/dash?key=${KEY}`, { headers: { 'x-forwarded-for': '6.6.6.6' } })).status, 200, 'other clients fine');
+    const login = (key, ip) => fetch(`${base}/dash/login`, {
+      method: 'POST', redirect: 'manual',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-forwarded-for': ip }, body: 'key=' + key,
+    });
+    assert.equal((await login(KEY, '7.7.7.7')).status, 302, 'right key works');
+    for (let i = 0; i < 10; i++) assert.equal((await login('wrong' + i, '7.7.7.7')).status, 403);
+    assert.equal((await login('wrong-again', '7.7.7.7')).status, 429, 'locked out');
+    assert.equal((await login(KEY, '7.7.7.7')).status, 429, 'even the right key, while locked');
+    assert.equal((await login(KEY, '6.6.6.6')).status, 302, 'other clients fine');
   });
 });
 
 test('the dashboard page never embeds its key', async () => {
   const KEY = 'another-long-random-dashboard-key-9876543210';
   await serve({ dashKey: KEY }, async (base) => {
-    const r = await fetch(`${base}/dash?key=${KEY}`, { headers: { 'x-forwarded-for': '5.5.5.5' } });
+    const ok = await fetch(`${base}/dash/login`, {
+      method: 'POST', redirect: 'manual',
+      headers: { 'content-type': 'application/x-www-form-urlencoded', 'x-forwarded-for': '5.5.5.5' }, body: 'key=' + KEY,
+    });
+    const r = await fetch(`${base}/dash`, { headers: { 'x-forwarded-for': '5.5.5.5', cookie: ok.headers.get('set-cookie').split(';')[0] } });
     assert.equal(r.status, 200);
     assert.ok(!(await r.text()).includes(KEY));
     assert.equal(r.headers.get('referrer-policy'), 'no-referrer');
