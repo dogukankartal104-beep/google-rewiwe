@@ -30,6 +30,10 @@ export function simulate(k, i, dir, en, st, t1, p = DEFAULTS, funding = null) {
   let exit = 'time', ex = k[end].c, xi = end;
   for (let j = f; j <= end; j++) {
     const stopHit = S ? k[j].h >= st : k[j].l <= st;
+    if (stopHit && p.tie === 'target') {            // optimistic bound: if the target is inside the same candle, it wins
+      const tp0 = S ? k[j].l <= t1 : k[j].h >= t1;
+      if (tp0) { exit = 'tp'; ex = t1; xi = j; break; }
+    }
     if (stopHit) { exit = 'stop'; ex = st; xi = j; break; }
     const tpHit = S ? k[j].l <= t1 : k[j].h >= t1;
     if (tpHit && (j > f || (S ? k[j].c <= t1 : k[j].c >= t1))) { exit = 'tp'; ex = t1; xi = j; break; }
@@ -98,7 +102,7 @@ export async function scanCoin(sym, fromMs, toMs, p = DEFAULTS, btc = null) {
       btc24: bi >= 96 ? (btc.k[bi].c / btc.k[bi - 96].c - 1) * 100 : null,
       btc1h: bi >= 4 ? (btc.k[bi].c / btc.k[bi - 4].c - 1) * 100 : null,
     };
-    signals.push({ s: sym, dir, tS, riskPct, grade: sg.grade, type: sg.type, mode: sg.mode, exN: sg.exN, leg: sg.leg, oiChg: sg.oiChg, ses: sg.ses, ...feat, ...r });
+    signals.push({ s: sym, dir, tS, en: sg.en, riskPct, grade: sg.grade, type: sg.type, mode: sg.mode, exN: sg.exN, leg: sg.leg, oiChg: sg.oiChg, ses: sg.ses, ...feat, ...r });
   }
 
   // Placebo: the same trade (side, stop distance, limit mechanics) at other times on the same coin.

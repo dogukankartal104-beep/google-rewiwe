@@ -52,9 +52,9 @@ export function dedupePerCoin(signals) {
 }
 
 /* Learn: features whose sign is stable across months and whose |rank correlation| with the net result is largest. */
-export function learn(disc, k = K) {
+export function learn(disc, k = K, features = FEATURES) {
   const rows = [];
-  for (const f of FEATURES) {
+  for (const f of features) {
     const d = disc.filter((x) => Number.isFinite(val(x, f)));
     if (d.length < 100) continue;
     const rho = spearman(d.map((x) => val(x, f)), d.map((x) => x.net));
@@ -99,24 +99,18 @@ export function randomBaseline(signals, taken, draws = 300, seed = 5) {
   return { mean: mean(means), p95: means[Math.floor(0.95 * means.length)] };
 }
 
-/* ---------------- main ---------------- */
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const sigs = [];
-  for (const f of fs.readdirSync(path.join(runDir, 'coins'))) {
-    const j = JSON.parse(fs.readFileSync(path.join(runDir, 'coins', f), 'utf8'));
-    for (const x of j.signals || []) if (x.filled) sigs.push({ s: f.replace('.json', ''), ...x });
-  }
-  const base = dedupePerCoin(sigs);
+/* ---------------- report ---------------- */
+export function labReport(base, features = FEATURES, title = 'PROTOCOL 2') {
   const disc = base.filter((x) => x.tS < split), dec = base.filter((x) => x.tS >= split);
   const fmt = (v, d = 3) => (v === undefined || v === null || Number.isNaN(v) ? '—' : (+v).toFixed(d));
-  const L = [`PROTOCOL 2 · ${new Date().toISOString()} · run ${path.basename(runDir)} · k=${K} perDay=${PER_DAY} threshold=p${PCT}`];
+  const L = [`${title} · ${new Date().toISOString()} · k=${K} perDay=${PER_DAY} threshold=p${PCT} · ${features.length} features`];
   L.push(`signals (filled, one per coin at a time): discovery ${disc.length}, decision ${dec.length}`, '');
 
   // 1) Winners vs losers on the discovery period (descriptive)
   const win = disc.filter((x) => x.exit === 'tp'), lose = disc.filter((x) => x.exit === 'stop');
   L.push(`WINNERS (target) ${win.length} vs LOSERS (stop) ${lose.length} · discovery · median of each feature`);
   L.push('feature      winners     losers    rank-corr with net   months agreeing');
-  const { rows, chosen } = learn(disc);
+  const { rows, chosen } = learn(disc, K, features);
   const med = (a) => { const s = a.filter(Number.isFinite).sort((x, y) => x - y); return s.length ? s[s.length >> 1] : NaN; };
   rows.sort((a, b) => Math.abs(b.rho) - Math.abs(a.rho)).forEach((r) => {
     L.push(`${r.f.padEnd(10)} ${fmt(med(win.map((x) => val(x, r.f))), 3).padStart(10)} ${fmt(med(lose.map((x) => val(x, r.f))), 3).padStart(10)}   ${fmt(r.rho, 3).padStart(8)}   ${r.agree}/${r.months}`);
@@ -154,7 +148,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       }
     }
   }
-  const text = L.join('\n');
+  return L.join('\n');
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const sigs = [];
+  for (const f of fs.readdirSync(path.join(runDir, 'coins'))) {
+    const j = JSON.parse(fs.readFileSync(path.join(runDir, 'coins', f), 'utf8'));
+    for (const x of j.signals || []) if (x.filled) sigs.push({ s: f.replace('.json', ''), ...x });
+  }
+  const text = labReport(dedupePerCoin(sigs));
   console.log(text);
   fs.writeFileSync(path.join(HERE, '..', 'docs', `fade-hud-sinav-rapor-lab-${path.basename(runDir)}.txt`), text + '\n');
 }

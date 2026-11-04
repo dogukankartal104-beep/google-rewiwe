@@ -103,7 +103,7 @@ export function parseMetrics(text) {
     const c = line.split(',');
     const t = Date.parse(c[0].replace(' ', 'T') + 'Z');
     const v = +c[2];
-    if (Number.isFinite(t) && Number.isFinite(v)) out.push({ t, v, u: +c[3] });
+    if (Number.isFinite(t) && Number.isFinite(v)) out.push({ t, v, u: +c[3], tt: +c[5], gl: +c[6], tk: +c[7] });
   }
   return out;
 }
@@ -124,6 +124,7 @@ export const dayKey = (t) => new Date(t).toISOString().slice(0, 10);
 export const klinesMonthly = (s, tf, ym) => `${P}monthly/klines/${s}/${tf}/${s}-${tf}-${ym}.zip`;
 export const klinesDaily = (s, tf, d) => `${P}daily/klines/${s}/${tf}/${s}-${tf}-${d}.zip`;
 export const metricsDaily = (s, d) => `${P}daily/metrics/${s}/${s}-metrics-${d}.zip`;
+export const premiumMonthly = (s, tf, ym) => `${P}monthly/premiumIndexKlines/${s}/${tf}/${s}-${tf}-${ym}.zip`;
 export const fundingMonthly = (s, ym) => `${P}monthly/fundingRate/${s}/${s}-fundingRate-${ym}.zip`;
 
 /* All candles of one symbol for [fromMs, toMs): monthly files, daily files for months with no monthly yet. */
