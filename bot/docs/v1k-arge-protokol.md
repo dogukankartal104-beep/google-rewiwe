@@ -65,4 +65,5 @@ Bir bölümün kuralı ancak kendi geçme şartını sağlarsa "gölgede deneneb
 için 1000 $, %5, 1x, günde en çok 2 ile ayda beklenen $ ve en kötü ay $.
 
 ## EK
-(boş)
+- EK-1 (SONUÇ SONRASI, 2026-11-04, karar kurallarını değiştirmez): rapor görüldükten sonra, bulunan tek ayırıcı (oi15 ≤ ~%6, yani
+  son 15 dakikada OI artışının zayıf olması) filtresinin yıl yıl etkisine bakıldı. Sonuç aşağıda `v1k-arge-rapor.md` sonunda.

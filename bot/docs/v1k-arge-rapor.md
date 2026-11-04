@@ -111,3 +111,17 @@ Filtre: puan = −oi15 (z-skor toplamı), eşik = KEŞİF medyanı 0.122; puanı
 - B giriş: E1.
 - D tepe ayrımı: oi15 ayırıcı bulundu.
 
+
+## EK-1 (sonuç sonrası, betimleyici): oi15 filtresinin yıl yıl etkisi
+Filtre: son 15 dakikada OI artışı ≤ %6.01 (KEŞİF ortalaması − 0.122 × sapma). TABAN ortalaması %, n:
+
+| yıl | hepsi | düşük OI (al) | yüksek OI (atla) |
+|---|---|---|---|
+| 2022 | -3.55 (27) | 1.84 (12) | -7.86 (15) |
+| 2023 | 14.01 (16) | 7.29 (5) | 17.07 (11) |
+| 2024 | -4.57 (50) | -4.87 (20) | -4.37 (30) |
+| 2025 | -0.46 (396) | 0.98 (203) | -1.97 (193) |
+| 2026 | 3.03 (466) | 4.77 (257) | 0.89 (209) |
+
+Yorum: iki büyük yılda (2025 ve 2026) filtre aynı yönde, +1.4 ve +3.9 puan daha iyi. 2022 aynı yönde, 2023 (n=16) ters, 2024 etkisiz.
+Bu tablo sonuç görüldükten sonra yapıldı; karar kurallarını değiştirmez, yalnız canlı doğrulamada izlenecek bir ipucudur.
