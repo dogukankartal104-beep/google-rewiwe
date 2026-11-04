@@ -92,7 +92,7 @@ export function parseKlines(text) {
   for (const line of text.split('\n')) {
     if (!line || line.charCodeAt(0) < 48 || line.charCodeAt(0) > 57) continue;     // header / blank
     const c = line.split(',');
-    out.push({ t: tsMs(c[0]), o: +c[1], h: +c[2], l: +c[3], c: +c[4], v: +c[5], q: +c[7], tb: +c[9] });
+    out.push({ t: tsMs(c[0]), o: +c[1], h: +c[2], l: +c[3], c: +c[4], v: +c[5], q: +c[7], tb: +c[9], tq: +c[10] });
   }
   return out;
 }
