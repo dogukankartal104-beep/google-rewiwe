@@ -63,6 +63,11 @@ const SCHEMA = [
     free_skip_why text, free_open_r double precision,
     created_at timestamptz not null default now()
   )`,
+  // Shadow trades: setups the engine saw but did not publish (grade too low, risk gate, failed deep check).
+  // Kept in their own table so they can never leak into member-facing stats, the risk gate or the free channel.
+  `create table if not exists shadow_signals (like signals including defaults)`,
+  `create unique index if not exists shadow_key_idx on shadow_signals (key)`,
+  `create index if not exists shadow_status_idx on shadow_signals (status)`,
   `create index if not exists signals_status_idx on signals (status)`,
   `create index if not exists signals_created_idx on signals (created_at desc)`,
   `create index if not exists signals_symdir_idx on signals (symbol, dir, created_at desc)`,
@@ -216,6 +221,23 @@ export async function insertSignal(row) {
      on conflict (key) do update set ${upd} returning *`, vals);
   return r;
 }
+
+export async function insertShadow(row) {
+  const cols = SIG_COLS.filter((c) => row[c] !== undefined);
+  const ph = cols.map((_, i) => '$' + (i + 1)).join(',');
+  return q(`insert into shadow_signals (${cols.join(',')}) values (${ph}) on conflict (key) do nothing`,
+    cols.map((c) => row[c]));
+}
+export const openShadows = () =>
+  q(`select * from shadow_signals where status in ('takip','bekliyor') order by created_at desc limit 300`);
+export async function patchShadow(key, patch) {
+  const cols = Object.keys(patch).filter((c) => patch[c] !== undefined);
+  if (!cols.length) return null;
+  const sets = cols.map((c, i) => `${c}=$${i + 2}`).join(',');
+  return q(`update shadow_signals set ${sets} where key=$1`, [key, ...cols.map((c) => patch[c])]);
+}
+export const shadowSince = (iso) =>
+  q(`select * from shadow_signals where created_at >= $1 order by created_at asc limit 5000`, [iso]);
 
 export const openSignals = () =>
   q(`select * from signals where status in ('takip','bekliyor')

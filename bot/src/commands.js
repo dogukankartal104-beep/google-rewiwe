@@ -12,6 +12,7 @@ import {
   publishDailyRecap, publishEducation, publishBreakingNews, publishNewsDigest,
 } from './publisher.js';
 import { MARKET } from './scanner.js';
+import { shadowReport } from './tracker.js';
 import { fmt, log, warn, trDateTime, dur, trDayStart } from './util.js';
 
 // at most 6 payment pages per person per hour: keeps NOWPayments and the database clean
@@ -242,6 +243,7 @@ async function adminCmd(cmd, args, from, ctx) {
         '<b>ADMIN</b>',
         '/panel — bu menü',
         '/stats — sistem durumu',
+        '/lab — engine lab: published vs shadow trades by grade, side, session, type',
         '/uyeler — aktif VIP listesi',
         '/ver &lt;telegram_id&gt; &lt;plan&gt; — elle VIP ver',
         '/al &lt;telegram_id&gt; — VIP\'i bitir ve çıkar',
@@ -464,6 +466,13 @@ async function adminCmd(cmd, args, from, ctx) {
       await publishMonthly(); await tg.send(from.id, '✅ aylık tablo denendi'); return true;
     case '/haberozet':
       await publishNewsDigest(); await tg.send(from.id, '✅ haber özeti denendi'); return true;
+
+    case '/lab': {
+      const since = new Date(Date.now() - 30 * 864e5).toISOString();
+      const [real, sh] = await Promise.all([db.signalsBetween(since, new Date(Date.now() + 864e5).toISOString()), db.shadowSince(since)]);
+      await tg.send(from.id, shadowReport(real || [], sh || []));
+      return true;
+    }
 
     case '/izleme': {
       if (!MARKET.watchlist.length) { await tg.send(from.id, 'İzleme listesi boş.'); return true; }

@@ -5,7 +5,7 @@ import * as tg from './telegram.js';
 import * as vip from './vip.js';
 import * as np from './payments.js';
 import { warmup, scanOnce, MARKET } from './scanner.js';
-import { resolveOpen } from './tracker.js';
+import { resolveOpen, resolveShadows } from './tracker.js';
 import {
   publishSignal, publishResult, publishPendingFree,
   publishDaily, publishDailyRecap, publishWeekly, publishMonthly,
@@ -36,6 +36,8 @@ async function tick() {
   // 1) açık pozisyonları güncelle, kapananların sonucunu yayınla
   try { await resolveOpen(publishResult); }
   catch (e) { warn('resolveOpen:', e.message); }
+  try { await resolveShadows(); }
+  catch (e) { warn('resolveShadows:', e.message); }
 
   // 2) tarama
   try { await runScan(); }

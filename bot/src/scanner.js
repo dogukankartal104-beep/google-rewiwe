@@ -74,6 +74,18 @@ async function cooling(symbol, dir) {
   }
 }
 
+// Shadow trades: remember what the engine saw but did not publish, so we can measure whether
+// the filters are helping or hurting once enough of them have played out. One per symbol+side per cooldown.
+const SHADOW_SEEN = new Map();
+function shadow(row, reason) {
+  const k = row.symbol + row.dir;
+  const last = SHADOW_SEEN.get(k) || 0;
+  if (Date.now() - last < CFG.reSignalMin * 6e4) return;
+  SHADOW_SEEN.set(k, Date.now());
+  db.insertShadow({ ...row, key: 'sh' + row.key, status: 'takip', skip_why: reason })
+    .catch((e) => warn('shadow:', e.message));
+}
+
 /* Bir adayı derinlemesine değerlendir: emir defteri, sektör, RVOL, beta ve
    (açıksa) canlı tape ile zenginleştirip kararı yeniden hesapla. */
 async function deepCheck(m, dir, btc15) {
@@ -193,10 +205,12 @@ export async function scanOnce(onSignal) {
 
       if (!VERDICT_LIVE.includes(d.vd)) {
         log(`derin kontrolde düştü: ${c.m.sym} ${c.dir} -> ${d.vd}`);
+        shadow(buildRow(c.m, c.dir, d, planOf(c.m, c.dir, null)), 'deep:' + d.vd);
         continue;
       }
       if (!gradeAtLeast(d.grade, ENV.minGradeVip)) {
         log(`sınıf yetersiz: ${c.m.sym} ${c.dir} ${d.grade} < ${ENV.minGradeVip}`);
+        shadow(buildRow(c.m, c.dir, d, planOf(c.m, c.dir, null)), 'grade:' + d.grade);
         continue;
       }
       if (await cooling(c.m.sym, c.dir)) continue;
@@ -207,6 +221,7 @@ export async function scanOnce(onSignal) {
       if (gate.skip) {
         row.status = 'atlandı';
         row.skip_why = gate.skip;
+        shadow(row, 'gate:' + gate.skip);
         await db.insertSignal(row).catch((e) => warn('atlanan kayıt:', e.message));
         log(`risk kapısı (${gate.skip}): ${c.m.sym} ${c.dir} kaydedildi ama yayınlanmadı`);
         continue;

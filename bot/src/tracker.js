@@ -117,6 +117,67 @@ export async function resolveOpen(onClose) {
   return closed;
 }
 
+/* Shadow trades: same replay as real signals, but they never publish anything. */
+export async function resolveShadows() {
+  let open;
+  try { open = await db.openShadows(); } catch (e) { warn('resolveShadows:', e.message); return 0; }
+  if (!open?.length) return 0;
+  let closed = 0;
+  await pool(open, 4, async (sig) => {
+    const iv = sig.tf || '15m';
+    const mins = TFM[iv] || 15;
+    try {
+      const rows = await api('/fapi/v1/klines', {
+        symbol: sig.symbol, interval: iv,
+        startTime: Date.parse(sig.created_at) - mins * 6e4,
+        limit: Math.min(500, CFG.trackBars + CFG.limitWaitBars + 10),
+      });
+      const k = toK(rows);
+      if (!k.length) return;
+      const patch = stepTrack(sig, k, mins);
+      delete patch.stop_now;
+      await db.patchShadow(sig.key, patch);
+      if (patch.closed_at) closed++;
+    } catch (e) { warn(`shadow ${sig.symbol}: ${e.message}`); }
+  });
+  return closed;
+}
+
+/* Group finished trades by a key and summarise: n, win %, average net R, total net R. */
+export function bucketize(rows, keyFn) {
+  const out = {};
+  for (const x of rows) {
+    if (!db.SAYILIR(x)) continue;
+    const key = keyFn(x) ?? '?';
+    const b = (out[key] = out[key] || { n: 0, win: 0, r: 0 });
+    const r = db.netOf(x);
+    b.n++; b.r += r; if (r > 0) b.win++;
+  }
+  return out;
+}
+
+const fmtBuckets = (title, b) => {
+  const lines = Object.entries(b).sort((a, c) => c[1].r - a[1].r).map(([k, v]) =>
+    `${String(k).padEnd(16).slice(0, 16)} n=${String(v.n).padStart(3)}  win ${String(Math.round((v.win / v.n) * 100)).padStart(3)}%  avg ${(v.r / v.n >= 0 ? '+' : '') + (v.r / v.n).toFixed(2)}R  tot ${(v.r >= 0 ? '+' : '') + v.r.toFixed(1)}R`);
+  return `<b>${title}</b>\n<pre>${lines.join('\n') || 'no finished trades yet'}</pre>`;
+};
+
+/* Real vs shadow, split the ways that tell us what to change. Small samples are flagged. */
+export function shadowReport(real, shadow) {
+  const all = [...shadow, ...real.map((x) => ({ ...x, skip_why: 'PUBLISHED' }))];
+  const n = all.filter(db.SAYILIR).length;
+  const parts = [
+    `<b>ENGINE LAB</b> · ${n} finished trades (${real.filter(db.SAYILIR).length} published, ${shadow.filter(db.SAYILIR).length} shadow)`,
+    n < 30 ? '⚠️ fewer than 30 finished trades: treat every number below as noise.' : '',
+    fmtBuckets('By outcome of the gate', bucketize(all, (x) => (x.skip_why || '').split(':')[0] || 'PUBLISHED')),
+    fmtBuckets('By grade', bucketize(all, (x) => x.grade)),
+    fmtBuckets('By side', bucketize(all, (x) => (x.dir === 'L' ? 'LONG' : 'SHORT'))),
+    fmtBuckets('By session', bucketize(all, (x) => x.session)),
+    fmtBuckets('By setup type', bucketize(all, (x) => x.type)),
+  ];
+  return parts.filter(Boolean).join('\n');
+}
+
 // ---- risk kapıları ----
 export async function riskGate() {
   try {
