@@ -6,6 +6,9 @@ import * as db from './db.js';
 import { api, klines } from './binance.js';
 import { MARKET } from './scanner.js';
 import { log, warn } from './util.js';
+import * as tg from './telegram.js';
+import * as M from './messages.js';
+import { notifyAdmins } from './vip.js';
 import { engineEntry, FILTER_OI15, VARIANTS } from '../bt/v1/engine.js';
 import { mtfFeatures } from '../bt/v1/mtf.js';
 
@@ -111,6 +114,7 @@ async function detect() {
       const variants = {}; Object.keys(VARIANTS).forEach((v) => { variants[v] = { state: VARIANTS[v].F && feat.F !== true ? 'filtered' : 'open' }; });
       await db.q(`insert into shadow_engine (key, engine, symbol, sig_at, features, variants) values ($1,$2,$3,$4,$5,$6) on conflict (key) do nothing`,
         [`${ENGINE}|${t.s}|${b}`, ENGINE, t.s, new Date(b).toISOString(), feat, variants]);
+      publishNew(`${ENGINE}|${t.s}|${b}`).catch((e) => warn(`v1k publish ${t.s}: ${e.message}`));
       log(`shadow v1k signal ${t.s}: 15m ${m.r15.toFixed(1)}% · 24h ${m.chg24.toFixed(0)}% · BTC24 ${m.btc24.toFixed(1)}% · oi15 ${feat.oi15 === null ? '—' : feat.oi15.toFixed(1)}% · filter ${feat.F}`);
     } catch (e) { warn(`shadow v1k ${t.s}: ${e.message}`); }
   }
@@ -157,9 +161,71 @@ export async function shadowTick() {
   if (!ENV.shadowOn || !db.dbReady()) return;
   try { await detect(); } catch (e) { warn('shadow detect:', e.message); }
   try { await resolveOpen(); } catch (e) { warn('shadow resolve:', e.message); }
+  try { await publishResults(); } catch (e) { warn('v1k results:', e.message); }
 }
 
 export async function shadowRows() {
   return db.q('select * from shadow_engine where engine=$1 order by sig_at asc limit 5000', [ENGINE]);
 }
 export async function shadowScorecard() { return scorecardText(await shadowRows()); }
+
+
+/* ------------------------------------------------------------------ publishing (variant K1 only)
+   VIP gets the signal immediately, results go to VIP at close and to free 24h after the signal (wins AND losses).
+   Guards: kill switch (/v1k off), at most 2 per UTC day, automatic pause after a bad run, DRY_RUN never records as published. */
+const MAX_PER_DAY = 2, PAUSE_LAST = 10, PAUSE_SUM = -30;
+export function publishGuard({ F, enabled, paused, publishedToday }) {
+  if (!enabled) return { ok: false, why: 'publishing off' };
+  if (paused) return { ok: false, why: 'paused after a bad run' };
+  if (F !== true) return { ok: false, why: 'filter not passed' };
+  if (publishedToday >= MAX_PER_DAY) return { ok: false, why: 'daily cap' };
+  return { ok: true };
+}
+export const shouldPause = (closedNets) => closedNets.length >= PAUSE_LAST && closedNets.slice(-PAUSE_LAST).reduce((a, b) => a + b, 0) <= PAUSE_SUM;
+
+const setPub = (id, patch) => db.q(`update shadow_engine set features = jsonb_set(features, '{pub}', coalesce(features->'pub','{}'::jsonb) || $2::jsonb) where id=$1`, [id, JSON.stringify(patch)]);
+async function publishEnabled() { return ENV.v1kPublish && !(await db.getState('v1k:off', false)); }
+
+async function publishNew(key) {
+  const row = (await db.q('select * from shadow_engine where key=$1', [key]))[0];
+  if (!row || row.features?.pub?.vip_at) return;
+  const day0 = new Date(); day0.setUTCHours(0, 0, 0, 0);
+  const today = (await db.q("select count(*)::int as n from shadow_engine where engine=$1 and features->'pub'->>'vip_at' is not null and sig_at >= $2", [ENGINE, day0.toISOString()]))[0]?.n || 0;
+  const g = publishGuard({ F: row.features?.F, enabled: await publishEnabled(), paused: await db.getState('v1k:paused', false), publishedToday: today });
+  if (!g.ok) { log(`v1k not published (${g.why}): ${row.symbol}`); return; }
+  if (!ENV.postVip || !ENV.vipChat) return;
+  const msg = await tg.send(ENV.vipChat, M.v1kSignal(row));
+  if (msg && !msg.dry) { await setPub(row.id, { vip_at: Date.now(), vip_msg: msg.message_id || null }); log(`v1k signal published to VIP: ${row.symbol}`); }
+}
+
+async function publishResults() {
+  if (!(await publishEnabled()) && !(await db.getState('v1k:off', false))) return;
+  const rows = await shadowRows();
+  const st = M.v1kStats(rows);
+  for (const r of rows) {
+    const pub = r.features?.pub, k1 = r.variants?.K1;
+    if (!pub?.vip_at || k1?.state !== 'closed') continue;
+    if (!pub.vip_res && ENV.postVip && ENV.vipChat) {
+      const m = M.v1kResult(r, st);
+      const msg = await tg.send(ENV.vipChat, m.text); if (msg && !msg.dry) await setPub(r.id, { vip_res: Date.now() });
+    }
+    if (!pub.free_at && ENV.postFree && ENV.freeChat && Date.now() >= Date.parse(r.sig_at) + DAY) {
+      const m = M.v1kResult(r, st, { forFree: true });
+      const msg = await tg.send(ENV.freeChat, m.text, { reply_markup: m.reply_markup }); if (msg && !msg.dry) await setPub(r.id, { free_at: Date.now() });
+    }
+  }
+  const nets = rows.filter((r) => r.features?.pub?.vip_at && r.variants?.K1?.state === 'closed').sort((a, b) => a.variants.K1.te - b.variants.K1.te).map((r) => r.variants.K1.net);
+  if (shouldPause(nets) && !(await db.getState('v1k:paused', false))) {
+    await db.setState('v1k:paused', true);
+    await notifyAdmins(`⏸ v1k publishing paused automatically: the last ${PAUSE_LAST} published signals sum to ${nets.slice(-PAUSE_LAST).reduce((a, b) => a + b, 0).toFixed(1)} points. Review /karne, then /v1k resume.`);
+  }
+}
+
+export async function v1kControl(arg) {
+  const a = String(arg || 'status').toLowerCase();
+  if (a === 'off') { await db.setState('v1k:off', true); return '⏹ v1k publishing is OFF (recording continues).'; }
+  if (a === 'on') { await db.setState('v1k:off', false); return `▶️ v1k publishing is ON${ENV.v1kPublish ? '' : ' (but V1K_PUBLISH=false in Railway, so it stays off)'}.`; }
+  if (a === 'resume') { await db.setState('v1k:paused', false); return '▶️ v1k auto-pause cleared.'; }
+  const rows = await shadowRows(), st = M.v1kStats(rows);
+  return `v1k publishing: ${(await publishEnabled()) ? 'ON' : 'OFF'} · auto-pause: ${(await db.getState('v1k:paused', false)) ? 'PAUSED' : 'clear'} · DRY_RUN: ${ENV.dryRun ? 'ON (nothing is sent to channels)' : 'off'}\nPublished and closed: ${st.n}, won ${st.wins}, mean ${st.mean == null ? '—' : st.mean.toFixed(2) + '%'}.\n/v1k on | off | resume · /karne`;
+}

@@ -13,7 +13,7 @@ import {
 } from './publisher.js';
 import { MARKET, buildRow } from './scanner.js';
 import { shadowReport } from './tracker.js';
-import { shadowScorecard } from './shadow.js';
+import { shadowScorecard, v1kControl } from './shadow.js';
 import { makeLoginToken } from './dashauth.js';
 import { runBacktest, backtestRunning } from './backtest.js';
 import { fmt, log, warn, trDateTime, dur, trDayStart } from './util.js';
@@ -247,6 +247,7 @@ async function adminCmd(cmd, args, from, ctx) {
         '/panel — bu menü',
         '/stats — sistem durumu',
         '/backtest [days] — replay the engine on the last 2-14 days (runs on Railway)',
+        '/v1k on|off|resume|status — v1k yayın anahtarı (kill switch) ve otomatik duraklatma',
         '/karne — v1k gölge karne (varyant başına n, ortalama, ortanca, düşüş; kanala hiçbir şey gitmez)',
         '/lab — engine lab: published vs shadow trades by grade, side, session, type',
         '/uyeler — aktif VIP listesi',
@@ -481,6 +482,10 @@ async function adminCmd(cmd, args, from, ctx) {
         .catch((e) => tg.send(from.id, '🧪 Backtest failed: ' + e.message));
       return true;
     }
+
+    case '/v1k':
+      await tg.send(from.id, await v1kControl(args[0]));
+      return true;
 
     case '/karne':
       await tg.send(from.id, await shadowScorecard());

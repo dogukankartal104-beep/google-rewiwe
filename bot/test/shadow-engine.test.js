@@ -50,3 +50,35 @@ test('scorecard text states that nothing was sent and applies the 30-signal gate
   assert.match(t, /K1: TUTTU/);
   assert.match(scorecardText([row(1)]), /tutmadı \(n=1\/30\)/);
 });
+
+import { publishGuard, shouldPause } from '../src/shadow.js';
+import * as M from '../src/messages.js';
+
+test('publish guard: kill switch, pause, filter and the daily cap each stop a signal', () => {
+  const base = { F: true, enabled: true, paused: false, publishedToday: 0 };
+  assert.equal(publishGuard(base).ok, true);
+  assert.equal(publishGuard({ ...base, enabled: false }).ok, false);
+  assert.equal(publishGuard({ ...base, paused: true }).ok, false);
+  assert.equal(publishGuard({ ...base, F: false }).ok, false);
+  assert.equal(publishGuard({ ...base, F: null }).ok, false, 'unknown open-interest data is never published');
+  assert.equal(publishGuard({ ...base, publishedToday: 2 }).ok, false);
+});
+
+test('auto-pause: ten published signals summing to -30 points or worse', () => {
+  assert.equal(shouldPause(Array(9).fill(-10)), false, 'needs ten results');
+  assert.equal(shouldPause([...Array(10).fill(-3)]), true);
+  assert.equal(shouldPause([...Array(10).fill(2)]), false);
+});
+
+test('v1k messages: risk note, no invented performance, results show losses too', () => {
+  const row = { symbol: 'FOOUSDT', sig_at: '2026-11-04T13:00:00Z', key: 'v1k|FOOUSDT|1', features: { px: 1.2345, chg24: 80, r15: 6, btc24: -2, oi15: 3.2 }, variants: { K1: { state: 'closed', net: -52.3, exit: 'stop' } } };
+  const sig = M.v1kSignal(row);
+  assert.match(sig, /EXPERIMENTAL/); assert.match(sig, /1x leverage only, at most 5%/); assert.match(sig, /no proven track record/);
+  assert.ok(!/win rate|guaranteed|profitable|expected return/i.test(sig));
+  assert.match(sig, /1\.8518/, 'stop is +50% of the entry');
+  const st = M.v1kStats([{ ...row, features: { ...row.features, pub: { vip_at: 1 } } }]);
+  assert.deepEqual([st.n, st.wins], [1, 0]);
+  const res = M.v1kResult(row, st, { forFree: true });
+  assert.match(res.text, /Stopped out/); assert.match(res.text, /-52\.3%/); assert.match(res.text, /unproven/);
+  assert.ok(res.reply_markup);
+});

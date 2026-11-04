@@ -100,6 +100,7 @@ export const ENV = {
 
   // --- haber motoru ---
   newsOn: bool('NEWS_ON', true),
+  v1kPublish: bool('V1K_PUBLISH', true),   // publish v1k filter signals (variant K1) to VIP, results to both; /v1k off is the kill switch
   shadowOn: bool('SHADOW_ENGINES', true),   // forward paper trading of the candidate engines (never publishes)
   newsMinScore: Number(str('NEWS_MIN_SCORE', '38')),  // bu puanın üstü "flaş haber"
   newsCheckMin: Number(str('NEWS_CHECK_MIN', '20')),  // kaç dakikada bir bakılsın

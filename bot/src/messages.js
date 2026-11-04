@@ -818,3 +818,49 @@ export function newsDigest(items, ctx = {}, { forFree = false } = {}) {
 
 // kept for backward compatibility with older imports
 export const nasilMsg = howMsg;
+
+
+/* ============================================================
+   v1k pump fade (experimental, live forward test). Honest wording: no performance claims, risk stated, every result posted.
+   ============================================================ */
+const utc = (t) => new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+export function v1kSignal(row, key = null) {
+  const f = row.features || {};
+  const px = f.px, D = f.px >= 100 ? 2 : f.px >= 1 ? 4 : f.px >= 0.01 ? 5 : 7;
+  const p = (v) => fmt(v, D);
+  const t0 = Date.parse(row.sig_at);
+  const lines = [];
+  lines.push('🧪 <b>EXPERIMENTAL · extreme pump fade</b>');
+  lines.push(`🔻 <b>${sym(row.symbol)}</b> · SHORT`);
+  lines.push('');
+  lines.push(`Entry: around <b>${p(px)}</b> (close of the signal candle)`);
+  lines.push(`Stop: <b>${p(px * 1.5)}</b> (+50%)`);
+  lines.push(`Exit: <b>${utc(t0 + 864e5)}</b> (24h), no take-profit`);
+  lines.push('');
+  lines.push(`Why: <b>${pct(f.chg24)}</b> in 24h, <b>${pct(f.r15)}</b> in the last 15m, BTC weak (${pct(f.btc24)} / 24h), new open interest is drying up (${f.oi15 == null ? 'n/a' : pct(f.oi15)} in 15m).`);
+  lines.push('');
+  lines.push('<b>Size: 1x leverage only, at most 5% of your account.</b> A stop-out costs about 2.5% of the account. A stop at +50% means 2x or more can be liquidated before it triggers.');
+  lines.push('This rule is in a live forward test. Every result, wins and losses, is posted. It has no proven track record yet.');
+  lines.push('');
+  lines.push(`<i>${RISK}</i>`);
+  return lines.join('\n');
+}
+export function v1kStats(rows) {
+  const closed = rows.filter((r) => r.variants?.K1?.state === 'closed' && r.features?.pub?.vip_at);
+  const nets = closed.map((r) => r.variants.K1.net);
+  return { n: nets.length, wins: nets.filter((x) => x > 0).length, mean: nets.length ? nets.reduce((a, b) => a + b, 0) / nets.length : null };
+}
+export function v1kResult(row, st, { forFree = false } = {}) {
+  const v = row.variants.K1, f = row.features || {};
+  const win = v.net > 0;
+  const lines = [];
+  lines.push(`${win ? '✅' : '🔴'} <b>v1k RESULT · ${sym(row.symbol)}</b> · SHORT`);
+  lines.push(`${v.exit === 'stop' ? 'Stopped out at +50%' : 'Closed after 24h'}: <b>${v.net > 0 ? '+' : ''}${fmt(v.net, 1)}%</b> of the position (after fees and funding)`);
+  lines.push(`On a 5% position that is ${v.net > 0 ? '+' : ''}${fmt(v.net * 0.05, 2)}% of the account.`);
+  lines.push('');
+  lines.push(`Track record of this rule so far: <b>${st.n}</b> closed signal${st.n === 1 ? '' : 's'}, <b>${st.wins}</b> won, average <b>${st.mean == null ? '—' : (st.mean > 0 ? '+' : '') + fmt(st.mean, 1) + '%'}</b> per trade. Small sample: treat it as unproven.`);
+  if (forFree) { lines.push(''); lines.push('VIP gets the signal the moment it fires, with entry, stop and exit time ⤵️'); }
+  lines.push('');
+  lines.push(`<i>${RISK}</i>`);
+  return { text: lines.join('\n'), reply_markup: forFree ? vipBtn('v1k', row.key || null) : undefined };
+}
