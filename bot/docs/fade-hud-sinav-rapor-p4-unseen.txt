@@ -1,0 +1,85 @@
+PROTOCOL 4 · 2026-11-04T06:44:09.674Z · run unseen · filled trades 47407 · 2021-12-02 → 2024-12-31
+
+A. MARKET-WIDE CONTEXT (all filled trades, protocol 1 trade, costs and funding included)
+--- LONG signals ---
+coins signalling in the same hour
+  1            n=  1186  mean   -0.495%  win  46.7%
+  2-3          n=  1205  mean   -0.292%  win  47.5%
+  4-9          n=  1549  mean   -0.395%  win  48.6%
+  10-29        n=  2806  mean   -0.677%  win  44.8%
+  30+          n= 22285  mean   -0.148%  win  52.0%
+BTC 24h change
+  -3..0%       n=  8779  mean   -0.461%  win  48.0%
+  -6..-3%      n=  8794  mean    0.007%  win  52.3%
+  0..3%        n=  1418  mean   -1.656%  win  38.5%
+  3..6%        n=   236  mean    0.102%  win  55.5%
+  < -6%        n=  9719  mean   -0.068%  win  53.2%
+  > 6%         n=    85  mean    2.582%  win  80.0%  (n<100: noise)
+BTC 4h change
+  -0.5..0.5%   n=  4651  mean    0.238%  win  57.2%
+  -2..-0.5%    n=  7002  mean   -0.207%  win  47.9%
+  0.5..2%      n=  3983  mean   -0.976%  win  44.1%
+  < -2%        n= 11755  mean   -0.166%  win  52.3%
+  > 2%         n=  1640  mean   -0.349%  win  49.9%
+hours since BTC 72h low
+  < 4h         n= 15841  mean   -0.680%  win  47.2%
+  4-12h        n=  7027  mean    0.087%  win  50.9%
+  12-36h       n=  3626  mean    0.714%  win  62.5%
+  > 36h        n=  2537  mean    0.323%  win  55.7%
+--- SHORT signals ---
+coins signalling in the same hour
+  1            n=  6409  mean   -0.002%  win  53.7%
+  2-3          n=  6030  mean   -0.195%  win  51.5%
+  4-9          n=  4557  mean   -0.100%  win  51.2%
+  10-29        n=   996  mean   -0.408%  win  47.9%
+  30+          n=   384  mean   -2.207%  win  23.2%
+BTC 24h change
+  -3..0%       n=  5320  mean   -0.304%  win  50.2%
+  -6..-3%      n=   710  mean    0.443%  win  56.6%
+  0..3%        n=  6952  mean   -0.122%  win  52.5%
+  3..6%        n=  3166  mean   -0.021%  win  52.2%
+  < -6%        n=   289  mean   -0.134%  win  50.5%
+  > 6%         n=  1939  mean   -0.329%  win  47.8%
+BTC 4h change
+  -0.5..0.5%   n=  8102  mean   -0.152%  win  51.6%
+  -2..-0.5%    n=  3608  mean   -0.226%  win  51.7%
+  0.5..2%      n=  3887  mean    0.154%  win  54.6%
+  < -2%        n=  1181  mean   -0.863%  win  40.3%
+  > 2%         n=  1598  mean   -0.271%  win  50.3%
+hours since BTC 72h low
+  < 4h         n=  1017  mean   -0.382%  win  49.2%
+  4-12h        n=  1503  mean   -0.301%  win  50.2%
+  12-36h       n=  4629  mean   -0.339%  win  49.6%
+  > 36h        n= 11227  mean   -0.043%  win  52.5%
+
+B. REALISTIC ACCOUNT (max 2 open, one per coin, first come; occupancy = full hold, pending orders not counted)
+protocol 1 trade, capped       n= 3650  mean 0.040%  median 0.874%  win 53.1%  LB90 -0.057%  halves 0.078 / 0.002  exTop5 0.031
+LONG, BTC24 < -3%, capped      n=  385  mean 0.387%  median 1.569%  win 55.8%  LB90 0.121%  halves 0.164 / 0.608  exTop5 0.314
+LONG, BTC24 >= -3%, capped     n=  639  mean -0.349%  median -0.652%  win 48.2%  LB90 -0.622%  halves -0.157 / -0.540  exTop5 -0.407
+SHORT, capped                  n= 2964  mean 0.020%  median 0.932%  win 53.0%  LB90 -0.089%  halves 0.088 / -0.048  exTop5 0.010
+
+C. SIGNAL QUALITY
+first signal on the coin in 30 days?
+coin size (24h volume tertile)
+  1 small      n= 15802  mean   -0.270%  win  50.4%
+  2 mid        n= 15802  mean   -0.114%  win  51.9%
+  3 large      n= 15803  mean   -0.228%  win  50.7%
+leg size %
+  15-20        n= 14547  mean   -0.719%  win  46.2%
+  20-30        n= 24236  mean    0.118%  win  54.0%
+  30-50        n=  8001  mean   -0.228%  win  50.8%
+  50+          n=   623  mean   -0.390%  win  49.3%
+stop size %
+  4-5          n= 21936  mean   -0.300%  win  49.8%
+  5-6          n= 13906  mean   -0.185%  win  51.3%
+  6+           n= 11565  mean   -0.043%  win  52.9%
+
+D. RISK AND SIZING · H1 rule on this run (capped account)
+H1 trades                      n=  385  mean 0.387%  median 1.569%  win 55.8%  LB90 0.121%  halves 0.164 / 0.608  exTop5 0.314
+size of each trade as % of equity (margin) × leverage → total return / max drawdown
+    5%   1x: 8% / -3%   2x: 15% / -6%   3x: 23% / -8%
+   10%   1x: 15% / -6%   2x: 31% / -11%   3x: 47% / -17%
+   15%   1x: 23% / -8%   2x: 47% / -17%   3x: 71% / -24%
+longest losing streak 7 · worst week -24.757% (sum of % per trade) · best week 37.147%
+with daily stop at -2R         n=  304  mean 0.077%  median 0.471%  win 52.0%  LB90 -0.300%  halves -0.054 / 0.208  exTop5 -0.021
+

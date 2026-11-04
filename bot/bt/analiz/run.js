@@ -15,6 +15,11 @@ const TO = Date.now() - 2 * 864e5 > 0 ? new Date(new Date(Date.now() - 2 * 864e5
 const cacheFile = path.join(HERE, '..', 'out', 'analiz-trades.json');
 fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
 const PER = ['KESIF', 'DOGRULAMA', 'SON'];
+// Scan results are cached per symbol so an interrupted run resumes instead of starting over.
+const scanDir = path.join(HERE, '..', 'out', 'analiz-scan' + (FROM === Date.UTC(2022, 0, 1) ? '' : '-' + arg('from')));
+fs.mkdirSync(scanDir, { recursive: true });
+const pack = (r) => ({ ...r, monthVol: [...r.monthVol], hourly: r.hourly ? { h0: r.hourly.h0, b64: Buffer.from(r.hourly.arr.buffer, r.hourly.arr.byteOffset, r.hourly.arr.byteLength).toString('base64') } : null });
+const unpack = (r) => ({ ...r, monthVol: new Map(r.monthVol), hourly: r.hourly ? (() => { const b = Buffer.from(r.hourly.b64, 'base64'); return { h0: r.hourly.h0, arr: new Float64Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength)) }; })() : null });
 const VS = (r) => r.period === 'DOGRULAMA' || r.period === 'SON';
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
@@ -33,7 +38,12 @@ if (fs.existsSync(cacheFile) && process.argv.includes('--cached')) {
   await Promise.all(Array.from({ length: 4 }, async () => {
     while (q.length) {
       const s = q.shift();
-      try { scans.push(await scanSymbol(s, FROM, TO, btc)); } catch (e) { scans.push({ sym: s, err: e.message, v1k: [], g1: [], monthVol: new Map(), daily: [], cov: {} }); }
+      const cf = path.join(scanDir, s + '.json');
+      if (fs.existsSync(cf)) { scans.push(unpack(JSON.parse(fs.readFileSync(cf, 'utf8')))); }
+      else {
+        try { const r = await scanSymbol(s, FROM, TO, btc); fs.writeFileSync(cf, JSON.stringify(pack(r))); scans.push(r); }
+        catch (e) { scans.push({ sym: s, err: e.message, v1k: [], g1: [], monthVol: new Map(), daily: [], cov: {} }); }
+      }
       if (++n % 50 === 0) log(`scan ${n}/${syms.length}`);
     }
   }));

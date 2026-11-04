@@ -1,0 +1,14 @@
+PROTOCOL 4 · 2026-11-04T06:44:07.663Z · run unseen · filled trades 47407 · 2021-12-02 → 2024-12-31
+
+H1 EXAM · LONG signals while BTC 24h < -3% · realistic account (max 2 open) · run once on the unseen period
+H1 trades                      n=  385  mean 0.387%  median 1.569%  win 55.8%  LB90 0.121%  halves 0.164 / 0.608  exTop5 0.314
+control (BTC24 >= -3%)         n=  639  mean -0.349%  median -0.652%  win 48.2%  LB90 -0.622%  halves -0.157 / -0.540  exTop5 -0.407
+PASS CONDITIONS
+PASS  1. mean net % > 0
+PASS  2. 90% lower bound > 0
+PASS  3. both halves positive
+PASS  4. mean without best 5 > 0
+PASS  5. beats the control
+PASS  6. at least 100 trades
+RESULT: H1 PASSED on the unseen period
+

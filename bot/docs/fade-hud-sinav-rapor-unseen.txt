@@ -1,0 +1,51 @@
+FADE HUD RULE · protocol 1 · generated 2026-11-04T06:43:48.891Z
+period 2021-12-01 → 2025-01-01 · split 2099-01-01 · fillBp 0
+
+COVERAGE
+measured 394 / universe 923 symbols · fatal 0 · symbols with missing months 0
+downloads 22958, from cache 2333, not in archive 26448, errors 0
+evaluated bars 2538360 · setups with a trade plan 59555 · dropped: no open-interest data 1212 lookups, frozen/zero-volume 0, code errors 0
+
+PORTFOLIO (1 per coin, max 2 open): 4048 accepted, 3469 filled, 579 limit orders never filled (14.3%)
+exits: target 1413, stop 1390, time 666
+
+== DISCOVERY ==
+gross (no costs)                   n= 3469  mean 0.107%  median 0.547%  win 51.5%  LB90 0.010%  half1 0.167  half2 0.047  exTop5 0.099  mdd -134.7
+net of costs                       n= 3469  mean -0.173%  median 0.347%  win 51.0%  LB90 -0.272%  half1 -0.113  half2 -0.233  exTop5 -0.182  mdd -681.5
+net of costs + funding  <- judged  n= 3469  mean -0.187%  median 0.294%  win 50.9%  LB90 -0.286%  half1 -0.135  half2 -0.240  exTop5 -0.197  mdd -722.0
+  side SHORT                       n= 2681  mean -0.135%  median 0.613%  win 51.7%  LB90 -0.248%  half1 -0.063  half2 -0.206  exTop5 -0.146  mdd -484.2
+  side LONG                        n=  788  mean -0.366%  median -0.633%  win 48.2%  LB90 -0.583%  half1 -0.399  half2 -0.334  exTop5 -0.411  mdd -322.9
+  grade A                          n=  820  mean -0.250%  median -0.179%  win 49.0%  LB90 -0.440%  half1 0.064  half2 -0.565  exTop5 -0.288  mdd -281.0
+  grade B                          n= 1108  mean -0.196%  median 0.400%  win 51.5%  LB90 -0.371%  half1 -0.389  half2 -0.004  exTop5 -0.225  mdd -305.2
+  grade C                          n= 1541  mean -0.147%  median 0.462%  win 51.4%  LB90 -0.311%  half1 -0.031  half2 -0.263  exTop5 -0.169  mdd -334.2
+placebo A (random time)            n=177045  mean -0.243%  median -0.210%  win 45.3%  LB90 -0.260%  half1 -0.235  half2 -0.250  exTop5 -0.243  mdd -42999.9
+placebo B (random big-move time)   n=177554  mean -0.150%  median 0.096%  win 51.0%  LB90 -0.242%  half1 -0.001  half2 -0.298  exTop5 -0.150  mdd -33720.2
+equity (10% at 2x, max 2 open): return -77.4% · max drawdown -80.2% · halves -42.9% / -60.5% · dd halves -49.8% / -63.5% · skipped 0
+
+== DECISION ==
+gross (no costs)                   n=0
+net of costs                       n=0
+net of costs + funding  <- judged  n=0
+  side SHORT                       n=0
+  side LONG                        n=0
+placebo A (random time)            n=0
+placebo B (random big-move time)   n=0
+equity (10% at 2x, max 2 open): return 0.0% · max drawdown 0.0% · halves —% / —% · dd halves 0.0% / 0.0% · skipped 0
+
+MULTIPLE CELLS (Benjamini-Hochberg q=0.10, mean > 0)
+DISCOVERY              p=0.9930 not significant
+DISCOVERY S            p=0.9240 not significant
+DISCOVERY L            p=0.9820 not significant
+DECISION               p=1.0000 not significant
+DECISION S             p=1.0000 not significant
+DECISION L             p=1.0000 not significant
+
+PASS CONDITIONS (decision period)
+FAIL  1. mean net % > 0
+FAIL  2. 90% lower bound > 0
+FAIL  3. both halves positive
+FAIL  4. mean without best 5 > 0
+FAIL  5. beats placebo B
+FAIL  6. equity: both halves positive and drawdown not worse in 2nd
+RESULT: DOES NOT PASS - no paid signals from this rule
+MONEY EFFECT: decision period 0 trades, mean —% per trade; equity test 0.0% with max drawdown 0.0%.
