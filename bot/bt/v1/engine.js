@@ -13,10 +13,11 @@ export const VARIANTS = {
 
 /* k: contiguous 1m candles, i0: the candle that opens at the signal time (the first 15m close after the alarm).
    Returns {ok:true, net, te, tEntry, exit, entry} | {skip:true, why} | {pending:true, why} | {ok:false, why} (still open or data problem). */
-export function engineEntry({ k, i0, tSig, funding = [], recs = [], vol = 0, useE1 = false, useO1 = false, delayMin = 0 }) {
+export function engineEntry({ k, i0, tSig, funding = [], recs = [], vol = 0, useE1 = false, useO1 = false, delayMin = 0, entryIdx = null }) {
   const ref = k[i0].o;
   let ei = i0;
-  if (useE1) {
+  if (entryIdx !== null) ei = entryIdx;          // entry chosen by the caller (e.g. a pullback confirmation); the stop still comes from the signal price
+  else if (useE1) {
     ei = -1;
     for (let b = 0; b < 8; b++) {
       const s = i0 + b * 15;
