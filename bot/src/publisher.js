@@ -36,6 +36,7 @@ export function weekKey(t = Date.now()) {
 
 /* ---------------- 1) VIP SİNYAL (anında) ---------------- */
 export async function publishSignal(sig) {
+  if (!ENV.fadePublish) return;                     // FADE engine is recorded but not published
   if (!ENV.postVip || !ENV.vipChat) return;
   try {
     const msg = await tg.sendCard(ENV.vipChat, await signalChartPng(sig), M.vipSignal(sig));
@@ -113,6 +114,7 @@ export function classifyFreeCandidate(s, now = Date.now(), env = ENV) {
 }
 
 export async function publishPendingFree() {
+  if (!ENV.fadePublish) return 0;
   if (!ENV.postFree || !ENV.freeChat) return 0;
 
   // --- günlük kota ---
@@ -175,8 +177,10 @@ export async function publishPendingFree() {
 
 /* ---------------- 3) SONUÇ KARTI ---------------- */
 export async function publishResult(sig) {
+  // With FADE publishing off, results are still posted for signals that WERE published (follow-through), never for the rest.
+  if (!ENV.fadePublish && !sig.vip_msg_id && !sig.free_posted_at) return;
   // VIP: her zaman, orijinal mesaja cevap olarak
-  if (ENV.postVip && ENV.vipChat) {
+  if (ENV.postVip && ENV.vipChat && (ENV.fadePublish || sig.vip_msg_id)) {
     try {
       const { text } = M.resultCard(sig, { forFree: false });
       const msg = await tg.send(ENV.vipChat, text,
@@ -260,6 +264,7 @@ export async function publishDaily() {
 
 /* ---------------- 5) GÜN KAPANIŞI (free vitrin) ---------------- */
 export async function publishDailyRecap() {
+  if (!ENV.fadePublish) return;
   if (!ENV.postFree || !ENV.freeChat) return;
   const key = dayKey();
   if (await db.postExists('recap', 'free', key)) return;
@@ -283,6 +288,7 @@ async function perfFor(fromMs, toMs) {
 }
 
 export async function publishWeekly() {
+  if (!ENV.fadePublish) return;
   // Geçen haftanın (Pzt–Paz) sonucu
   const now = Date.now();
   const d = trDate(now);
@@ -302,6 +308,7 @@ export async function publishWeekly() {
 }
 
 export async function publishMonthly() {
+  if (!ENV.fadePublish) return;
   const d = trDate(Date.now());
   const firstThis = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) - 3 * 3600e3;
   const prev = new Date(firstThis - 864e5);

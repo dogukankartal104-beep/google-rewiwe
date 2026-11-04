@@ -125,4 +125,8 @@ export const profitChartPng = ({ symbol, tf = '15m', dir = 'S', entry, now, stop
   return renderPng(candleChartSvg({ symbol, tf, candles, lines, tag: dir === 'L' ? 'LONG' : 'SHORT', badge: { big: profitText, small, color: C.up }, foot: 'Selected position shown while in profit. Not financial advice.' }));
 });
 
+/* Generic level chart (used for the v1k VIP signal): lines = [{price,label,color}], badge = {big, small, color}. */
+export const levelChartPng = ({ symbol, tf = '15m', tag = '', lines, badge, foot }) => safe(async () => renderPng(candleChartSvg({ symbol, tf, candles: await candlesFor(symbol, tf), tag, lines, badge, foot })));
+export { C as CHART_COLORS };
+
 export const newsCardPng = (item, when) => safe(() => renderPng(newsCardSvg({ title: item.title, tag: item.tags?.[0] || '', source: item.source, when })));

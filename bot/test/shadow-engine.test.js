@@ -87,3 +87,17 @@ test('v1k free messages: honest showcase note, risk line, result shows losses, n
   const vip = M.v1kSignal(row);
   assert.match(vip, /1x leverage only/);
 });
+
+import { ENV } from '../src/config.js';
+import { publishSignal, publishPendingFree, publishDailyRecap, publishWeekly, publishMonthly, publishResult } from '../src/publisher.js';
+
+test('FADE engine is recorded but not published; v1k is the VIP engine', async () => {
+  assert.equal(ENV.fadePublish, false, 'FADE_PUBLISH defaults to off');
+  assert.equal(ENV.v1kVipPerDay, 2);
+  // with publishing off none of these may touch Telegram or the database (the test environment has neither)
+  await publishSignal({ symbol: 'FOOUSDT', key: 'k' });
+  assert.equal(await publishPendingFree(), 0);
+  await publishDailyRecap(); await publishWeekly(); await publishMonthly();
+  // a never-published signal produces no result post
+  await publishResult({ symbol: 'FOOUSDT', key: 'k', vip_msg_id: null, free_posted_at: null });
+});

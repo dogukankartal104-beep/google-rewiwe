@@ -8,7 +8,7 @@ import { MARKET } from './scanner.js';
 import { log, warn } from './util.js';
 import * as tg from './telegram.js';
 import * as M from './messages.js';
-import { profitChartPng } from './chart.js';
+import { profitChartPng, levelChartPng, CHART_COLORS } from './chart.js';
 import { notifyAdmins } from './vip.js';
 import { engineEntry, FILTER_OI15, VARIANTS } from '../bt/v1/engine.js';
 import { mtfFeatures } from '../bt/v1/mtf.js';
@@ -194,13 +194,20 @@ export const shouldPause = (closedNets) => closedNets.length >= PAUSE_LAST && cl
 const setPub = (id, patch) => db.q(`update shadow_engine set features = jsonb_set(features, '{pub}', coalesce(features->'pub','{}'::jsonb) || $2::jsonb) where id=$1`, [id, JSON.stringify(patch)]);
 async function publishEnabled() { return ENV.v1kPublish && !(await db.getState('v1k:off', false)); }
 
-/* Optional instant VIP signal (V1K_VIP=true). Off by default. */
+/* The VIP engine (V1K_VIP=true): every signal that passes the filter goes to VIP the moment it is recorded, with a chart.
+   Guards: kill switch, auto-pause, at most V1K_VIP_PER_DAY a day, unknown open-interest data is never published.
+   DRY_RUN never records as published. Results of every VIP signal, wins and losses, are posted to VIP when it closes. */
 async function publishNew(key) {
   if (!ENV.v1kVip || !(await publishEnabled()) || (await db.getState('v1k:paused', false))) return;
   const row = (await db.q('select * from shadow_engine where key=$1', [key]))[0];
   if (!row || row.features?.F !== true || row.features?.pub?.vip_at || !ENV.postVip || !ENV.vipChat) return;
-  const msg = await tg.send(ENV.vipChat, M.v1kSignal(row));
-  if (msg && !msg.dry) await setPub(row.id, { vip_at: Date.now(), vip_msg: msg.message_id || null });
+  const day0 = new Date(); day0.setUTCHours(0, 0, 0, 0);
+  const today = (await db.q("select count(*)::int as n from shadow_engine where engine=$1 and (features->'pub'->>'vip_at')::bigint >= $2", [ENGINE, day0.getTime()]))[0]?.n || 0;
+  if (today >= ENV.v1kVipPerDay) { log(`v1k VIP daily cap reached, not published: ${row.symbol}`); return; }
+  const px = row.features.px;
+  const png = await levelChartPng({ symbol: row.symbol, tag: 'SHORT SIGNAL', lines: [{ price: px, label: 'ENTRY', color: CHART_COLORS.blue }, { price: px * 1.5, label: 'STOP', color: CHART_COLORS.dn }], badge: { big: 'SHORT', small: 'exit in 24h · 1x only · max 5%', color: CHART_COLORS.dn }, foot: 'Experimental rule in live forward test. Not financial advice.' });
+  const msg = await tg.sendCard(ENV.vipChat, png, M.v1kSignal(row));
+  if (msg && !msg.dry) { await setPub(row.id, { vip_at: Date.now(), vip_msg: msg.message_id || null }); log(`v1k signal published to VIP: ${row.symbol}`); }
 }
 
 async function lastClose(symbol) {
@@ -216,7 +223,13 @@ async function publishResults() {
   let shownToday = rows.filter((r) => (r.features?.pub?.free_at || 0) >= day0.getTime()).length;
   for (const r of rows) {
     const pub = r.features?.pub || {}, k1 = r.variants?.K1;
-    if (!ENV.postFree || !ENV.freeChat) break;
+    // VIP: the final result of every VIP signal, wins and losses, as a reply to the signal
+    if (pub.vip_at && !pub.vip_res && k1?.state === 'closed' && ENV.postVip && ENV.vipChat) {
+      const m = M.v1kResult(r);
+      const msg = await tg.send(ENV.vipChat, m.text, pub.vip_msg ? { reply_parameters: { message_id: pub.vip_msg, allow_sending_without_reply: true } } : {});
+      if (msg && !msg.dry) await setPub(r.id, { vip_res: Date.now() });
+    }
+    if (!ENV.postFree || !ENV.freeChat) continue;
     // 1) final result of a showcased position, always, wins and losses
     if (pub.free_at && !pub.free_res && k1?.state === 'closed') {
       const msg = await tg.send(ENV.freeChat, M.v1kResult(r).text);
@@ -250,5 +263,5 @@ export async function v1kControl(arg) {
   if (a === 'resume') { await db.setState('v1k:paused', false); return '▶️ v1k auto-pause cleared.'; }
   const rows = await shadowRows();
   const shown = rows.filter((r) => r.features?.pub?.free_at);
-  return `v1k free showcase: ${(await publishEnabled()) ? 'ON' : 'OFF'} · VIP instant signals: ${ENV.v1kVip ? 'ON' : 'off'} · auto-pause: ${(await db.getState('v1k:paused', false)) ? 'PAUSED' : 'clear'} · DRY_RUN: ${ENV.dryRun ? 'ON (nothing is sent to channels)' : 'off'}\nRecorded ${rows.length}, showcased ${shown.length}, showcased and closed ${shown.filter((r) => r.variants?.K1?.state === 'closed').length}.\n/v1k on | off | resume · /karne (full record, every signal)`;
+  return `v1k free showcase: ${(await publishEnabled()) ? 'ON' : 'OFF'} · VIP engine (instant signals): ${ENV.v1kVip ? 'ON' : 'off'}, at most ${ENV.v1kVipPerDay}/day · FADE publishing: ${ENV.fadePublish ? 'ON' : 'off'} · auto-pause: ${(await db.getState('v1k:paused', false)) ? 'PAUSED' : 'clear'} · DRY_RUN: ${ENV.dryRun ? 'ON (nothing is sent to channels)' : 'off'}\nRecorded ${rows.length}, showcased ${shown.length}, showcased and closed ${shown.filter((r) => r.variants?.K1?.state === 'closed').length}.\n/v1k on | off | resume · /karne (full record, every signal)`;
 }
