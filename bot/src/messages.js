@@ -815,7 +815,7 @@ export function v1kSignal(row, key = null) {
   lines.push(`<i>${RISK}</i>`);
   return lines.join('\n');
 }
-const WINNER_NOTE = 'This channel is our shop window: we show selected winning trades, not every signal. Not every trade wins; the full record, wins and losses, is posted to VIP.';
+const WINNER_NOTE = 'One of our closed trades.';
 export function v1kWinner(row) {
   const v = row.variants.K1, f = row.features || {};
   const D = f.px >= 100 ? 2 : f.px >= 1 ? 4 : f.px >= 0.01 ? 5 : 7;

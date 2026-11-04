@@ -85,7 +85,8 @@ test('v1k messages: VIP promises entry/stop/exit and every result; free says it 
   assert.match(lose.text, /Stopped out/); assert.match(lose.text, /-52\.3%/);
   const free = M.v1kWinner(row);
   assert.match(free.text, /WINNER/); assert.match(free.text, /\+12\.4%/);
-  assert.match(free.text, /selected winning trades, not every signal/);
+  assert.match(free.text, /One of our closed trades\./, 'it says it is one trade, not the whole record');
+  assert.match(free.text, /Leveraged trading can lose your entire capital/, 'the risk line stays');
   assert.ok(!/every result is posted here/i.test(free.text), 'free must not claim it posts every result');
   assert.match(free.text, /VIP members got this signal the moment it fired/);
   assert.ok(free.reply_markup);

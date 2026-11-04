@@ -234,7 +234,7 @@ async function publishResults() {
     if (d.act !== 'post') continue;
     const m = M.v1kWinner(r);
     const px = r.features.px, exitPx = px * (1 - k1.net / 100);
-    const png = await profitChartPng({ symbol: r.symbol, tf: '15m', dir: 'S', entry: px, now: exitPx, nowLabel: 'EXIT', profitText: `+${k1.net.toFixed(1)}%`, small: 'SHORT · CLOSED IN PROFIT', endTime: k1.te, foot: 'Selected winning trade. Not every trade wins. Not financial advice.' });
+    const png = await profitChartPng({ symbol: r.symbol, tf: '15m', dir: 'S', entry: px, now: exitPx, nowLabel: 'EXIT', profitText: `+${k1.net.toFixed(1)}%`, small: 'SHORT · CLOSED IN PROFIT', endTime: k1.te, foot: 'Closed trade. Not financial advice.' });
     const msg = await tg.sendCard(ENV.freeChat, png, m.text, { reply_markup: m.reply_markup });
     if (msg && !msg.dry) { await setPub(r.id, { free_at: Date.now(), free_net: k1.net }); shownToday++; log(`v1k winner → free: ${r.symbol} (+${k1.net.toFixed(1)}%)`); }
   }
