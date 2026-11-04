@@ -112,7 +112,7 @@ async function deepCheck(m, dir, btc15) {
   return { d, ctx };
 }
 
-function buildRow(m, dir, d, P) {
+export function buildRow(m, dir, d, P) {
   const isS = dir === 'S';
   const D = decFor(P.en, m.sym, PREC);
   const leg = isS ? m.pumpPct : -m.DN.leg;

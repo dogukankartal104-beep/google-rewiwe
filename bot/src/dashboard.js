@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 import { ENV, CFG } from './config.js';
 import * as db from './db.js';
 import * as tg from './telegram.js';
-import { stats } from './tracker.js';
+import { stats, bucketize } from './tracker.js';
 import { MARKET } from './scanner.js';
 import { dayKey } from './publisher.js';
 import { trDayStart, trDate, fmt, warn } from './util.js';
@@ -31,7 +31,7 @@ export async function aggregate({ force = false } = {}) {
 
   const [
     vipActive, openSig, closed30, closedToday, pays30, joinedToday,
-    clicks7, chStats, recentSig, recentPays, users, eduFree, eduVip,
+    clicks7, chStats, recentSig, recentPays, users, eduFree, eduVip, shadow30,
   ] = await Promise.all([
     safe(db.vipActive(), []),
     safe(db.openSignals(), []),
@@ -46,6 +46,7 @@ export async function aggregate({ force = false } = {}) {
     safe(db.usersCount(), 0),
     safe(db.eduLast('free'), null),
     safe(db.eduLast('vip'), null),
+    safe(db.shadowSince(iso(now - 30 * 864e5)), []),
   ]);
 
   const st30 = stats(closed30);
@@ -154,6 +155,20 @@ export async function aggregate({ force = false } = {}) {
       },
       egri: curve,
     },
+    lab: (() => {
+      const isBt = (x) => String(x.skip_why || '').startsWith('bt:');
+      const sum = (rows) => {
+        const b = bucketize(rows, () => 'all').all || { n: 0, win: 0, r: 0 };
+        return { n: b.n, isabet: b.n ? Math.round((b.win / b.n) * 100) : null, ort: b.n ? +(b.r / b.n).toFixed(2) : null, toplam: +b.r.toFixed(1) };
+      };
+      const grades = (rows) => Object.fromEntries(Object.entries(bucketize(rows, (x) => x.grade))
+        .map(([g, v]) => [g, { n: v.n, isabet: Math.round((v.win / v.n) * 100), ort: +(v.r / v.n).toFixed(2) }]));
+      const bt = shadow30.filter(isBt), sh = shadow30.filter((x) => !isBt(x));
+      return {
+        yayinlanan: sum(closed30), golge: sum(sh), backtest: sum(bt),
+        btSinif: grades(bt), golgeSinif: grades(sh),
+      };
+    })(),
     acik: openSig.map((s) => ({
       sembol: s.symbol, yon: s.dir, sinif: s.grade,
       r: s.open_r ?? 0, maxR: s.max_r, giris: s.entry, stop: s.stop,
@@ -272,6 +287,8 @@ tr:hover td{background:#111a23}
   <div class="card"><div class="hd">açık pozisyonlar</div>
     <div id="topen"></div></div>
 </div>
+
+<div class="card"><div class="hd">engine lab · yayınlanan vs gölge vs backtest</div><div id="tlab"></div></div>
 
 <div class="g2">
   <div class="card"><div class="hd">son ödemeler</div>
@@ -415,6 +432,13 @@ function render(d){
   + '<div class="row2"><span>genişlik</span><span class="lbl">'+esc(g.note||'')+'</span><span>'
       +'<span class="up">'+(g.up??'—')+'↑</span> / <span class="dn">'+(g.dn??'—')+'↓</span></span></div>'
   + grRows + ynRows;
+
+  // --- lab ---
+  const L = d.lab || {};
+  const labRow = (name, x) => '<div class="row2"><span>'+name+'</span><span class="lbl">'+(x&&x.n?x.n+' işlem · isabet %'+x.isabet:'veri yok')+'</span><span class="'+cls(x&&x.ort)+'">'+(x&&x.n?sgn(x.ort)+'R ort':'—')+'</span></div>';
+  const gl = (name, o) => Object.keys(o||{}).sort().map(g=>labRow(name+' '+esc(g), o[g])).join('');
+  $('#tlab').innerHTML = labRow('yayınlanan (gerçek)', L.yayinlanan) + labRow('gölge (elenenler)', L.golge)
+    + labRow('backtest (geçmiş tekrar)', L.backtest) + gl('gölge sınıf', L.golgeSinif) + gl('backtest sınıf', L.btSinif);
 
   // --- notlar ---
   const n = [];

@@ -164,16 +164,23 @@ const fmtBuckets = (title, b) => {
 
 /* Real vs shadow, split the ways that tell us what to change. Small samples are flagged. */
 export function shadowReport(real, shadow) {
-  const all = [...shadow, ...real.map((x) => ({ ...x, skip_why: 'PUBLISHED' }))];
-  const n = all.filter(db.SAYILIR).length;
+  const isBt = (x) => String(x.skip_why || '').startsWith('bt:');
+  const bt = shadow.filter(isBt);
+  const live = [...shadow.filter((x) => !isBt(x)), ...real.map((x) => ({ ...x, skip_why: 'PUBLISHED' }))];
+  const cut = (title, rows) => [
+    fmtBuckets(title + ' · by grade', bucketize(rows, (x) => x.grade)),
+    fmtBuckets(title + ' · by side', bucketize(rows, (x) => (x.dir === 'L' ? 'LONG' : 'SHORT'))),
+    fmtBuckets(title + ' · by session', bucketize(rows, (x) => x.session)),
+    fmtBuckets(title + ' · by setup type', bucketize(rows, (x) => x.type)),
+  ];
+  const nl = live.filter(db.SAYILIR).length, nb = bt.filter(db.SAYILIR).length;
   const parts = [
-    `<b>ENGINE LAB</b> · ${n} finished trades (${real.filter(db.SAYILIR).length} published, ${shadow.filter(db.SAYILIR).length} shadow)`,
-    n < 30 ? '⚠️ fewer than 30 finished trades: treat every number below as noise.' : '',
-    fmtBuckets('By outcome of the gate', bucketize(all, (x) => (x.skip_why || '').split(':')[0] || 'PUBLISHED')),
-    fmtBuckets('By grade', bucketize(all, (x) => x.grade)),
-    fmtBuckets('By side', bucketize(all, (x) => (x.dir === 'L' ? 'LONG' : 'SHORT'))),
-    fmtBuckets('By session', bucketize(all, (x) => x.session)),
-    fmtBuckets('By setup type', bucketize(all, (x) => x.type)),
+    `<b>ENGINE LAB</b> · live ${nl} finished (${real.filter(db.SAYILIR).length} published, ${nl - real.filter(db.SAYILIR).length} shadow) · backtest ${nb}`,
+    nl + nb < 30 ? '⚠️ fewer than 30 finished trades: treat every number below as noise.' : '',
+    fmtBuckets('Live · by gate outcome', bucketize(live, (x) => (x.skip_why || '').split(':')[0] || 'PUBLISHED')),
+    ...cut('Live', live),
+    nb ? '<i>Backtest replays recent history without order book or tape, so it tests the pattern and the stop/target logic, not the full live filters.</i>' : '',
+    ...(nb ? cut('Backtest', bt) : []),
   ];
   return parts.filter(Boolean).join('\n');
 }

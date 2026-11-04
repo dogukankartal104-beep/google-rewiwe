@@ -11,8 +11,9 @@ import {
   perfLastDays, publishDaily, publishWeekly, publishMonthly,
   publishDailyRecap, publishEducation, publishBreakingNews, publishNewsDigest,
 } from './publisher.js';
-import { MARKET } from './scanner.js';
+import { MARKET, buildRow } from './scanner.js';
 import { shadowReport } from './tracker.js';
+import { runBacktest, backtestRunning } from './backtest.js';
 import { fmt, log, warn, trDateTime, dur, trDayStart } from './util.js';
 
 // at most 6 payment pages per person per hour: keeps NOWPayments and the database clean
@@ -243,6 +244,7 @@ async function adminCmd(cmd, args, from, ctx) {
         '<b>ADMIN</b>',
         '/panel — bu menü',
         '/stats — sistem durumu',
+        '/backtest [days] — replay the engine on the last 2-14 days (runs on Railway)',
         '/lab — engine lab: published vs shadow trades by grade, side, session, type',
         '/uyeler — aktif VIP listesi',
         '/ver &lt;telegram_id&gt; &lt;plan&gt; — elle VIP ver',
@@ -466,6 +468,16 @@ async function adminCmd(cmd, args, from, ctx) {
       await publishMonthly(); await tg.send(from.id, '✅ aylık tablo denendi'); return true;
     case '/haberozet':
       await publishNewsDigest(); await tg.send(from.id, '✅ haber özeti denendi'); return true;
+
+    case '/backtest': {
+      if (backtestRunning()) { await tg.send(from.id, 'A backtest is already running.'); return true; }
+      const days = Math.min(14, Math.max(2, parseInt(args[0], 10) || 7));
+      await tg.send(from.id, `🧪 Backtest started: last ${days} days, top 40 coins by volume. It runs in the background and takes a few minutes. Results arrive here and in /lab.`);
+      runBacktest({ days, tickers: MARKET.tick || [], buildRow })
+        .then((s) => tg.send(from.id, `🧪 Backtest done in ${s.sec}s · ${s.symbols} coins · ${s.analyses} moments checked · ${s.setups} setups · ${s.stored} finished · ${s.errors} errors.\nSend /lab to see the breakdown.`))
+        .catch((e) => tg.send(from.id, '🧪 Backtest failed: ' + e.message));
+      return true;
+    }
 
     case '/lab': {
       const since = new Date(Date.now() - 30 * 864e5).toISOString();
