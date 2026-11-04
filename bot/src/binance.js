@@ -11,16 +11,18 @@ export const PREC = {};
 export const TICKSZ = {};
 export const ONBOARD = {};
 
-let backoffUntil = 0;
+// A 429 from one host (say CoinGecko) must not slow down calls to another (Binance).
+const backoffUntil = new Map();   // host -> timestamp until which we stay away from it
 
 export async function api(path, params = {}, base = FAPI, tries = 3) {
   const u = new URL(base + path);
+  const host = u.host;
   for (const [k, v] of Object.entries(params)) {
     if (v !== undefined && v !== null) u.searchParams.set(k, v);
   }
   let lastErr;
   for (let i = 0; i < tries; i++) {
-    const wait = backoffUntil - Date.now();
+    const wait = (backoffUntil.get(host) || 0) - Date.now();
     if (wait > 0) await sleep(wait);
     try {
       const ctl = AbortSignal.timeout(20000);
@@ -28,8 +30,8 @@ export async function api(path, params = {}, base = FAPI, tries = 3) {
       if (r.status === 429 || r.status === 418) {
         const ra = Number(r.headers.get('retry-after') || 0);
         const pause = Math.max(5000, ra * 1000, 2000 * 2 ** i);
-        backoffUntil = Date.now() + pause;
-        warn(`binance ${r.status} rate limit, ${Math.round(pause / 1000)}s bekleniyor`);
+        backoffUntil.set(host, Date.now() + pause);
+        warn(`${host} ${r.status} rate limit, waiting ${Math.round(pause / 1000)}s`);
         lastErr = new Error('rate limit ' + r.status);
         continue;
       }

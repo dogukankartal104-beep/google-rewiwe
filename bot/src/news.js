@@ -194,7 +194,14 @@ const uidOf = (item) =>
     .update((item.url || '') + '|' + item.title.toLowerCase().slice(0, 120))
     .digest('hex').slice(0, 24);
 
+// A feed that just failed is skipped for a while: a source that is down (HTTP 522, timeouts)
+// would otherwise cost a request and a log line every cycle.
+const FEED_DOWN = new Map();          // name -> timestamp until which it is skipped
+const FEED_COOLDOWN_MS = 30 * 60e3;
+export const _feedDown = FEED_DOWN;
+
 async function fetchFeed(f) {
+  if ((FEED_DOWN.get(f.name) || 0) > Date.now()) return [];
   try {
     const r = await fetch(f.url, {
       signal: AbortSignal.timeout(Number(process.env.NEWS_TIMEOUT_MS || 25000)),
@@ -206,7 +213,8 @@ async function fetchFeed(f) {
     if (!items.length) throw new Error('içerik ayrıştırılamadı');
     return items.map((i) => ({ ...i, source: f.name, lang: f.lang }));
   } catch (e) {
-    warn(`haber kaynağı (${f.name}): ${e.message}`);
+    warn(`news source ${f.name} failed (${e.message}) — skipping it for ${FEED_COOLDOWN_MS / 60e3} min`);
+    FEED_DOWN.set(f.name, Date.now() + FEED_COOLDOWN_MS);
     return [];
   }
 }
