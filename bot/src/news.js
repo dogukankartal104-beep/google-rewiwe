@@ -123,6 +123,22 @@ export const TIPS = {
   MARKET: 'Sharp moves create the exhaustion setups we hunt — but all three phases still have to confirm.',
 };
 
+
+/* "What could happen" — plain scenarios per topic, no numbers, no predictions. Shown in both channels. */
+export const WHAT = {
+  SECURITY: ['Fear can hit the named coin and sometimes the whole sector first, then the market reprices once the size of the loss is known.', 'If funds are recovered or the damage is small, the drop can fade quickly; if not, confidence takes weeks to return.'],
+  INSOLVENCY: ['Contagion is the main risk: other platforms and coins tied to the name can sell off together.', 'Relief can arrive just as fast if a rescue or a clear plan appears.'],
+  LIQUIDATION: ['Forced selling or buying can push price past fair value for a short while.', 'Once the forced flow is over, price often snaps back part of the way; the question is whether new positions are piling in again.'],
+  REGULATION: ['Rules can hit sentiment immediately, and details usually matter more than the first headline.', 'If the final text is softer than feared, the first drop can reverse; if it is harsher, pressure can last for days.'],
+  ETF: ['Fund news changes how much new money can reach the market, so spot demand is the thing to watch.', 'Approvals can be priced in before they happen, so the first reaction is not always the lasting one.'],
+  MACRO: ['Data releases and central bank decisions move the whole market at once, and prices can whip in both directions within minutes.', 'The direction after the dust settles often differs from the first spike.'],
+  EXCHANGE: ['A new listing can bring a burst of attention and volume to a coin.', 'Early pumps often fade once the first wave of buyers is done, but strong ones can keep running.'],
+  WHALE: ['A large transfer might be a sale, a custody move or an internal shuffle; the headline alone does not say which.', 'It matters more if it is followed by real selling on exchanges.'],
+  NETWORK: ['Scheduled unlocks add supply to the market, and traders tend to position early.', 'The price effect is often felt before the date, not on it.'],
+  FRAUD: ['Trust in the project is usually gone for good and liquidity dries up.', 'Related coins can wobble for a while out of caution.'],
+  MARKET: ['After a sharp move the market is stretched and can either continue on momentum or snap back.', 'The next few hours usually show which one is happening.'],
+};
+
 const BIG = /\b(bitcoin|btc|ethereum|eth|binance|coinbase|tether|usdt|solana|xrp)\b/i;
 
 export function scoreItem(title, { lang = 'tr' } = {}) {
@@ -139,7 +155,7 @@ export function scoreItem(title, { lang = 'tr' } = {}) {
   }
   if (score && BIG.test(t)) score += 10;      // büyük isim geçiyorsa daha çok ilgi görür
   if (lang === 'en') score -= 8;              // Türkçe kaynak tercih edilir
-  return { score, tags, why, tip: TIPS[tags[0]] || null };
+  return { score, tags, why, tip: TIPS[tags[0]] || null, what: WHAT[tags[0]] || null };
 }
 
 /* ---------------- RSS AYRIŞTIRMA (bağımlılıksız) ---------------- */

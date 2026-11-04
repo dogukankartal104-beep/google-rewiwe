@@ -515,15 +515,16 @@ Treat `TELEGRAM_BOT_TOKEN`, `NOWPAYMENTS_API_KEY`, `NOWPAYMENTS_IPN_SECRET`, `DA
 
 **Known limits.** A member can always screenshot a signal. The IPN signature algorithm has not yet
 been exercised with real NOWPayments traffic; the API re-check above is what protects payments, and
-the bot alerts you if a genuine payment arrives with a signature that does not verify. Run one
-end-to-end test purchase (see the hidden `_test` plan) before selling to real customers.
+the bot alerts you if a genuine payment arrives with a signature that does not verify. Do one real
+purchase yourself before selling to customers.
 
 ## News: VIP and free are different products
 
-- **VIP** gets a fresh flash story (at most `NEWS_MAX_PER_DAY` a day) with a *desk view*: how to
+- **VIP** gets one very important story a day (`NEWS_MAX_PER_DAY`, score at least `NEWS_MIN_SCORE`) with a *desk view*: how to
   trade around it, the live market state, the coins it names and the open book.
-- **Free** gets only big stories (`NEWS_FREE_MIN_SCORE`), at most one a day, `NEWS_FREE_DELAY_MIN`
-  minutes after VIP, without the desk view, with a pointer to VIP.
+- **Free** gets up to four stories a day (`NEWS_FREE_MAX_PER_DAY`), spaced at least `NEWS_FREE_GAP_MIN` minutes apart,
+  each with a plain "what could happen" explanation, without the how-to-trade section, with a pointer to VIP.
+  News posts carry no numbers of our own (no scores, percentages or counters).
 - The same event is never posted twice: duplicates are caught by story id, headline similarity and
   a per-topic cooldown (`NEWS_TAG_COOLDOWN_H`). A story older than `NEWS_BREAKING_MINUTES` is not
   "breaking"; it waits for the evening digest.

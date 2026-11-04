@@ -100,16 +100,20 @@ export const ENV = {
 
   // --- haber motoru ---
   newsOn: bool('NEWS_ON', true),
-  v1kPublish: bool('V1K_PUBLISH', true),   // publish v1k filter signals (variant K1) to VIP, results to both; /v1k off is the kill switch
+  v1kPublish: bool('V1K_PUBLISH', true),   // v1k showcase in the FREE channel (positions already in profit); /v1k off is the kill switch
+  v1kVip: bool('V1K_VIP', false),          // instant v1k signals to VIP: OFF until the owner decides
+  v1kFreeMinProfit: Number(str('V1K_FREE_MIN_PROFIT', '3')),   // % of the position in profit before it is shown
   shadowOn: bool('SHADOW_ENGINES', true),   // forward paper trading of the candidate engines (never publishes)
-  newsMinScore: Number(str('NEWS_MIN_SCORE', '38')),  // bu puanın üstü "flaş haber"
+  newsMinScore: Number(str('NEWS_MIN_SCORE', '70')),  // bu puanın üstü "flaş haber"
   newsCheckMin: Number(str('NEWS_CHECK_MIN', '20')),  // kaç dakikada bir bakılsın
-  newsMaxPerDay: Number(str('NEWS_MAX_PER_DAY', '3')),     // VIP: at most this many flash stories a day
+  newsMaxPerDay: Number(str('NEWS_MAX_PER_DAY', '1')),     // VIP: at most this many flash stories a day
   newsBreakingMin: Number(str('NEWS_BREAKING_MINUTES', '90')), // a flash story must be younger than this
   newsTagCooldownH: Number(str('NEWS_TAG_COOLDOWN_H', '6')),   // same topic (e.g. SECURITY) at most once per this many hours
   // The free channel gets far less: only big stories, one a day at most, and later than VIP
-  newsFreeMinScore: Number(str('NEWS_FREE_MIN_SCORE', '70')),
-  newsFreeMaxPerDay: Number(str('NEWS_FREE_MAX_PER_DAY', '1')),
+  newsFreeMinScore: Number(str('NEWS_FREE_MIN_SCORE', '38')),
+  newsFreeMaxPerDay: Number(str('NEWS_FREE_MAX_PER_DAY', '4')),
+  newsFreeGapMin: Number(str('NEWS_FREE_GAP_MIN', '90')),      // minutes between two free news posts
+  newsDigestOn: bool('NEWS_DIGEST', false),                     // the evening digest is off: free gets up to 4 stories, VIP 1
   newsFreeDelayMin: Number(str('NEWS_FREE_DELAY_MIN', '20')),
   newsDigestHour: Number(str('NEWS_DIGEST_HOUR', '19')), // günlük haber özeti saati
 

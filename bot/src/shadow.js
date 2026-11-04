@@ -170,62 +170,83 @@ export async function shadowRows() {
 export async function shadowScorecard() { return scorecardText(await shadowRows()); }
 
 
-/* ------------------------------------------------------------------ publishing (variant K1 only)
-   VIP gets the signal immediately, results go to VIP at close and to free 24h after the signal (wins AND losses).
-   Guards: kill switch (/v1k off), at most 2 per UTC day, automatic pause after a bad run, DRY_RUN never records as published. */
-const MAX_PER_DAY = 2, PAUSE_LAST = 10, PAUSE_SUM = -30;
-export function publishGuard({ F, enabled, paused, publishedToday }) {
-  if (!enabled) return { ok: false, why: 'publishing off' };
-  if (paused) return { ok: false, why: 'paused after a bad run' };
-  if (F !== true) return { ok: false, why: 'filter not passed' };
-  if (publishedToday >= MAX_PER_DAY) return { ok: false, why: 'daily cap' };
-  return { ok: true };
+/* ------------------------------------------------------------------ publishing: FREE showcase only (variant K1)
+   Free channel = shop window: a filtered signal is shown only after it has been open for a while and is in profit
+   (V1K_FREE_MIN_PROFIT). The FINAL result of every showcased position is posted, wins and losses, and every post says that
+   only selected positions are shown. VIP receives nothing from v1k unless V1K_VIP=true. The auto-pause looks at ALL filtered
+   signals (not only the showcased ones), so it cannot be fooled by the selection.
+   DRY_RUN never records as published; /v1k off is the kill switch. */
+const PAUSE_LAST = 10, PAUSE_SUM = -30, WINDOW_H = 6;
+export function showcaseDecision({ enabled, paused, F, ageMs, profitPct, shownToday, perDay, minProfit, delayMs, k1State }) {
+  if (!enabled) return { act: 'wait', why: 'publishing off' };
+  if (paused) return { act: 'wait', why: 'paused' };
+  if (F !== true) return { act: 'skip', why: 'filter not passed' };
+  if (k1State === 'closed') return { act: 'skip', why: 'closed before it was shown' };
+  if (ageMs < delayMs) return { act: 'wait', why: 'too early' };
+  if (ageMs > WINDOW_H * HOUR) return { act: 'skip', why: 'never in profit in time' };
+  if (shownToday >= perDay) return { act: 'wait', why: 'daily cap' };
+  if (!(profitPct >= minProfit)) return { act: 'wait', why: 'not in profit yet' };
+  return { act: 'post' };
 }
 export const shouldPause = (closedNets) => closedNets.length >= PAUSE_LAST && closedNets.slice(-PAUSE_LAST).reduce((a, b) => a + b, 0) <= PAUSE_SUM;
 
 const setPub = (id, patch) => db.q(`update shadow_engine set features = jsonb_set(features, '{pub}', coalesce(features->'pub','{}'::jsonb) || $2::jsonb) where id=$1`, [id, JSON.stringify(patch)]);
 async function publishEnabled() { return ENV.v1kPublish && !(await db.getState('v1k:off', false)); }
 
+/* Optional instant VIP signal (V1K_VIP=true). Off by default. */
 async function publishNew(key) {
+  if (!ENV.v1kVip || !(await publishEnabled()) || (await db.getState('v1k:paused', false))) return;
   const row = (await db.q('select * from shadow_engine where key=$1', [key]))[0];
-  if (!row || row.features?.pub?.vip_at) return;
-  const day0 = new Date(); day0.setUTCHours(0, 0, 0, 0);
-  const today = (await db.q("select count(*)::int as n from shadow_engine where engine=$1 and features->'pub'->>'vip_at' is not null and sig_at >= $2", [ENGINE, day0.toISOString()]))[0]?.n || 0;
-  const g = publishGuard({ F: row.features?.F, enabled: await publishEnabled(), paused: await db.getState('v1k:paused', false), publishedToday: today });
-  if (!g.ok) { log(`v1k not published (${g.why}): ${row.symbol}`); return; }
-  if (!ENV.postVip || !ENV.vipChat) return;
+  if (!row || row.features?.F !== true || row.features?.pub?.vip_at || !ENV.postVip || !ENV.vipChat) return;
   const msg = await tg.send(ENV.vipChat, M.v1kSignal(row));
-  if (msg && !msg.dry) { await setPub(row.id, { vip_at: Date.now(), vip_msg: msg.message_id || null }); log(`v1k signal published to VIP: ${row.symbol}`); }
+  if (msg && !msg.dry) await setPub(row.id, { vip_at: Date.now(), vip_msg: msg.message_id || null });
+}
+
+async function lastClose(symbol) {
+  const k = await klines(symbol, '1m', 3);
+  const done = k.filter((x) => x.t + MIN <= Date.now());
+  return done.length ? done[done.length - 1].c : null;
 }
 
 async function publishResults() {
-  if (!(await publishEnabled()) && !(await db.getState('v1k:off', false))) return;
+  const enabled = await publishEnabled(), paused = await db.getState('v1k:paused', false);
   const rows = await shadowRows();
-  const st = M.v1kStats(rows);
+  const day0 = new Date(); day0.setUTCHours(0, 0, 0, 0);
+  let shownToday = rows.filter((r) => (r.features?.pub?.free_at || 0) >= day0.getTime()).length;
   for (const r of rows) {
-    const pub = r.features?.pub, k1 = r.variants?.K1;
-    if (!pub?.vip_at || k1?.state !== 'closed') continue;
-    if (!pub.vip_res && ENV.postVip && ENV.vipChat) {
-      const m = M.v1kResult(r, st);
-      const msg = await tg.send(ENV.vipChat, m.text); if (msg && !msg.dry) await setPub(r.id, { vip_res: Date.now() });
+    const pub = r.features?.pub || {}, k1 = r.variants?.K1;
+    if (!ENV.postFree || !ENV.freeChat) break;
+    // 1) final result of a showcased position, always, wins and losses
+    if (pub.free_at && !pub.free_res && k1?.state === 'closed') {
+      const msg = await tg.send(ENV.freeChat, M.v1kResult(r).text);
+      if (msg && !msg.dry) await setPub(r.id, { free_res: Date.now() });
+      continue;
     }
-    if (!pub.free_at && ENV.postFree && ENV.freeChat && Date.now() >= Date.parse(r.sig_at) + DAY) {
-      const m = M.v1kResult(r, st, { forFree: true });
-      const msg = await tg.send(ENV.freeChat, m.text, { reply_markup: m.reply_markup }); if (msg && !msg.dry) await setPub(r.id, { free_at: Date.now() });
-    }
+    // 2) showcase a filtered position that is in profit
+    if (pub.free_at || pub.skip || r.features?.F !== true || !['open', 'pending'].includes(k1?.state) && k1?.state !== 'closed') continue;
+    const age = Date.now() - Date.parse(r.sig_at);
+    let profit = null;
+    if (age >= ENV.freeDelayMin * 60e3 && age <= WINDOW_H * HOUR && k1?.state !== 'closed') { const px = await lastClose(r.symbol).catch(() => null); if (px) profit = (r.features.px - px) / r.features.px * 100; }
+    const d = showcaseDecision({ enabled, paused, F: r.features.F, ageMs: age, profitPct: profit, shownToday, perDay: ENV.freePerDay, minProfit: ENV.v1kFreeMinProfit, delayMs: ENV.freeDelayMin * 60e3, k1State: k1?.state });
+    if (d.act === 'skip') { await setPub(r.id, { skip: d.why }); continue; }
+    if (d.act !== 'post') continue;
+    const m = M.v1kShowcase(r, profit);
+    const msg = await tg.send(ENV.freeChat, m.text, { reply_markup: m.reply_markup });
+    if (msg && !msg.dry) { await setPub(r.id, { free_at: Date.now(), free_px: profit }); shownToday++; log(`v1k showcase → free: ${r.symbol} (+${profit.toFixed(1)}% in profit)`); }
   }
-  const nets = rows.filter((r) => r.features?.pub?.vip_at && r.variants?.K1?.state === 'closed').sort((a, b) => a.variants.K1.te - b.variants.K1.te).map((r) => r.variants.K1.net);
-  if (shouldPause(nets) && !(await db.getState('v1k:paused', false))) {
+  const nets = rows.filter((x) => x.features?.F === true && x.variants?.K1?.state === 'closed').sort((a, b) => a.variants.K1.te - b.variants.K1.te).map((x) => x.variants.K1.net);
+  if (shouldPause(nets) && !paused) {
     await db.setState('v1k:paused', true);
-    await notifyAdmins(`⏸ v1k publishing paused automatically: the last ${PAUSE_LAST} published signals sum to ${nets.slice(-PAUSE_LAST).reduce((a, b) => a + b, 0).toFixed(1)} points. Review /karne, then /v1k resume.`);
+    await notifyAdmins(`⏸ v1k showcase paused automatically: the last ${PAUSE_LAST} filtered signals (all of them, not only the shown ones) sum to ${nets.slice(-PAUSE_LAST).reduce((a, b) => a + b, 0).toFixed(1)} points. Review /karne, then /v1k resume.`);
   }
 }
 
 export async function v1kControl(arg) {
   const a = String(arg || 'status').toLowerCase();
-  if (a === 'off') { await db.setState('v1k:off', true); return '⏹ v1k publishing is OFF (recording continues).'; }
-  if (a === 'on') { await db.setState('v1k:off', false); return `▶️ v1k publishing is ON${ENV.v1kPublish ? '' : ' (but V1K_PUBLISH=false in Railway, so it stays off)'}.`; }
+  if (a === 'off') { await db.setState('v1k:off', true); return '⏹ v1k showcase is OFF (recording continues).'; }
+  if (a === 'on') { await db.setState('v1k:off', false); return `▶️ v1k showcase is ON${ENV.v1kPublish ? '' : ' (but V1K_PUBLISH=false in Railway, so it stays off)'}.`; }
   if (a === 'resume') { await db.setState('v1k:paused', false); return '▶️ v1k auto-pause cleared.'; }
-  const rows = await shadowRows(), st = M.v1kStats(rows);
-  return `v1k publishing: ${(await publishEnabled()) ? 'ON' : 'OFF'} · auto-pause: ${(await db.getState('v1k:paused', false)) ? 'PAUSED' : 'clear'} · DRY_RUN: ${ENV.dryRun ? 'ON (nothing is sent to channels)' : 'off'}\nPublished and closed: ${st.n}, won ${st.wins}, mean ${st.mean == null ? '—' : st.mean.toFixed(2) + '%'}.\n/v1k on | off | resume · /karne`;
+  const rows = await shadowRows();
+  const shown = rows.filter((r) => r.features?.pub?.free_at);
+  return `v1k free showcase: ${(await publishEnabled()) ? 'ON' : 'OFF'} · VIP instant signals: ${ENV.v1kVip ? 'ON' : 'off'} · auto-pause: ${(await db.getState('v1k:paused', false)) ? 'PAUSED' : 'clear'} · DRY_RUN: ${ENV.dryRun ? 'ON (nothing is sent to channels)' : 'off'}\nRecorded ${rows.length}, showcased ${shown.length}, showcased and closed ${shown.filter((r) => r.variants?.K1?.state === 'closed').length}.\n/v1k on | off | resume · /karne (full record, every signal)`;
 }

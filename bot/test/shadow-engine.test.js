@@ -51,34 +51,39 @@ test('scorecard text states that nothing was sent and applies the 30-signal gate
   assert.match(scorecardText([row(1)]), /tutmadı \(n=1\/30\)/);
 });
 
-import { publishGuard, shouldPause } from '../src/shadow.js';
+import { showcaseDecision, shouldPause } from '../src/shadow.js';
 import * as M from '../src/messages.js';
 
-test('publish guard: kill switch, pause, filter and the daily cap each stop a signal', () => {
-  const base = { F: true, enabled: true, paused: false, publishedToday: 0 };
-  assert.equal(publishGuard(base).ok, true);
-  assert.equal(publishGuard({ ...base, enabled: false }).ok, false);
-  assert.equal(publishGuard({ ...base, paused: true }).ok, false);
-  assert.equal(publishGuard({ ...base, F: false }).ok, false);
-  assert.equal(publishGuard({ ...base, F: null }).ok, false, 'unknown open-interest data is never published');
-  assert.equal(publishGuard({ ...base, publishedToday: 2 }).ok, false);
+const base = { enabled: true, paused: false, F: true, ageMs: 2 * 3600e3, profitPct: 5, shownToday: 0, perDay: 1, minProfit: 3, delayMs: 40 * 60e3, k1State: 'open' };
+test('showcase: only filtered positions that are in profit, after the delay, within the daily cap', () => {
+  assert.equal(showcaseDecision(base).act, 'post');
+  assert.equal(showcaseDecision({ ...base, profitPct: 1 }).act, 'wait', 'not in profit enough yet');
+  assert.equal(showcaseDecision({ ...base, profitPct: -8 }).act, 'wait', 'losing positions are never shown');
+  assert.equal(showcaseDecision({ ...base, ageMs: 10 * 60e3 }).act, 'wait', 'too early');
+  assert.equal(showcaseDecision({ ...base, shownToday: 1 }).act, 'wait', 'daily cap');
+  assert.equal(showcaseDecision({ ...base, F: false }).act, 'skip');
+  assert.equal(showcaseDecision({ ...base, F: null }).act, 'skip', 'unknown open-interest data is never shown');
+  assert.equal(showcaseDecision({ ...base, ageMs: 7 * 3600e3 }).act, 'skip', 'window over');
+  assert.equal(showcaseDecision({ ...base, k1State: 'closed' }).act, 'skip', 'already closed (stopped) before it was shown');
+  assert.equal(showcaseDecision({ ...base, enabled: false }).act, 'wait', 'kill switch');
+  assert.equal(showcaseDecision({ ...base, paused: true }).act, 'wait', 'auto-pause');
 });
 
-test('auto-pause: ten published signals summing to -30 points or worse', () => {
+test('auto-pause: ten filtered signals summing to -30 points or worse', () => {
   assert.equal(shouldPause(Array(9).fill(-10)), false, 'needs ten results');
   assert.equal(shouldPause([...Array(10).fill(-3)]), true);
   assert.equal(shouldPause([...Array(10).fill(2)]), false);
 });
 
-test('v1k messages: risk note, no invented performance, results show losses too', () => {
+test('v1k free messages: honest showcase note, risk line, result shows losses, no invented statistics', () => {
   const row = { symbol: 'FOOUSDT', sig_at: '2026-11-04T13:00:00Z', key: 'v1k|FOOUSDT|1', features: { px: 1.2345, chg24: 80, r15: 6, btc24: -2, oi15: 3.2 }, variants: { K1: { state: 'closed', net: -52.3, exit: 'stop' } } };
-  const sig = M.v1kSignal(row);
-  assert.match(sig, /EXPERIMENTAL/); assert.match(sig, /1x leverage only, at most 5%/); assert.match(sig, /no proven track record/);
-  assert.ok(!/win rate|guaranteed|profitable|expected return/i.test(sig));
-  assert.match(sig, /1\.8518/, 'stop is +50% of the entry');
-  const st = M.v1kStats([{ ...row, features: { ...row.features, pub: { vip_at: 1 } } }]);
-  assert.deepEqual([st.n, st.wins], [1, 0]);
-  const res = M.v1kResult(row, st, { forFree: true });
-  assert.match(res.text, /Stopped out/); assert.match(res.text, /-52\.3%/); assert.match(res.text, /unproven/);
-  assert.ok(res.reply_markup);
+  const sc = M.v1kShowcase(row, 4.2);
+  assert.match(sc.text, /POSITION IN PROFIT/); assert.match(sc.text, /Not every signal is shown/); assert.match(sc.text, /whatever it is/);
+  assert.ok(sc.reply_markup);
+  assert.ok(!/win rate|guaranteed|track record|expected return/i.test(sc.text));
+  const res = M.v1kResult(row);
+  assert.match(res.text, /Stopped out/); assert.match(res.text, /-52\.3%/); assert.match(res.text, /wins and losses/);
+  assert.ok(!/track record|average/i.test(res.text), 'no cumulative statistics that only count shown trades');
+  const vip = M.v1kSignal(row);
+  assert.match(vip, /1x leverage only/);
 });

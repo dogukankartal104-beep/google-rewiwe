@@ -191,18 +191,17 @@ test('newsFlash (VIP): headline, source, why it matters and the desk view', () =
   assert.match(text, /SECURITY/);
   assert.match(text, /200 milyon dolar/);
   assert.match(text, /Kriptokoin/);
-  assert.match(text, /12m ago/);
+  assert.match(text, /just now/);
   assert.match(text, /Why it matters/);
-  assert.match(text, /-2\.10%/);
-  assert.match(text, /Desk view/);
-  assert.match(text, /Open book: WIF ▼ \+1\.35R · PEPE ▲ -0\.22R/);
+  assert.match(text, /How to trade around it/);
+  assert.match(text, /Open book: WIF short, PEPE long/);
   assert.match(text, /Not financial advice/);
   assert.ok(!/undefined|NaN/.test(text));
 });
 
 test('newsFlash: BTC şokunda "yeni pozisyon açmıyor" uyarısı', () => {
   const { text } = M.newsFlash(item, { btc15: -4.5, shock: 3.2, rejim: 'aşağı rejim' });
-  assert.match(text, /shock 3\.2×/);
+  assert.match(text, /jumpy/);
   assert.match(text, /no new positions/);
 });
 
@@ -218,14 +217,13 @@ test('newsFlash: eksik bağlamda çökmez', () => {
   assert.match(text, /Test/);
 });
 
-test('newsDigest: haberleri numaralı listeler', () => {
+test('newsDigest: haberleri madde işaretiyle listeler, sayı vermez', () => {
   const { text } = M.newsDigest([item, { ...item, title: 'İkinci haber' }],
-    { btc15: 0.4, rejim: 'yatay', breadth: { up: 18, dn: 7 } });
+    { btc15: 0.4, rejim: 'yatay', breadth: { up: 18, dn: 7, n: 25 } });
   assert.match(text, /TODAY IN CRYPTO/);
-  assert.match(text, /1\./);
-  assert.match(text, /2\./);
-  assert.match(text, /İkinci haber/);
-  assert.match(text, /18↑\/7↓/);
+  assert.match(text, /• İkinci haber/);
+  assert.ok(!/18↑|7↓|\b1\.|\b2\./.test(text));
+  assert.match(text, /most coins are rising|mixed|most coins are falling/);
   assert.ok(!/undefined|NaN/.test(text));
 });
 

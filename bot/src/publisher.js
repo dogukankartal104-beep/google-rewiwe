@@ -446,7 +446,7 @@ export async function publishBreakingNews() {
 
   // a fresh, high-scoring macro headline switches the engine's macro-window veto on
   for (const it of items) {
-    if (it.tags?.[0] === 'MACRO' && it.score >= ENV.newsMinScore && now - it.at <= 30 * 60e3) noteMacroNews(it.at);
+    if (it.tags?.[0] === 'MACRO' && it.score >= 38 && now - it.at <= 30 * 60e3) noteMacroNews(it.at);
   }
 
   let logRows;
@@ -485,40 +485,27 @@ export async function publishBreakingNews() {
     }
   }
 
-  // ---------------- FREE: later, rarer, shorter ----------------
-  if (ENV.postFree && ENV.freeChat && freeToday < ENV.newsFreeMaxPerDay) {
-    const cutoff = now - ENV.newsFreeDelayMin * 60e3;
-    const langOf = (src) => news.feeds().find((f) => f.name === src)?.lang || 'en';
-    const cand = vipAll
-      .filter((r) => r.score >= ENV.newsFreeMinScore
-        && Date.parse(r.posted_at) <= cutoff
-        && now - Date.parse(r.posted_at) <= 6 * 3600e3)
-      .sort((a, b) => b.score - a.score)
-      .find((r) => !news.isDuplicate(
-        { uid: r.uid, title: r.title, tags: String(r.tags || '').split(',') }, freeAll, { cooldownMs, now }).dup);
-
-    if (cand) {
-      const lang = langOf(cand.source);
-      const sc = news.scoreItem(cand.title, { lang });
-      const item = {
-        uid: cand.uid, title: cand.title, url: cand.url, source: cand.source, score: cand.score,
-        tags: String(cand.tags || '').split(',').filter(Boolean), lang, why: sc.why, tip: sc.tip,
-        at: cand.published_at ? Date.parse(cand.published_at) : Date.parse(cand.posted_at),
-      };
+  // ---------------- FREE: up to ENV.newsFreeMaxPerDay stories a day, spaced out, picked on their own ----------------
+  const lastFree = freeAll.reduce((m, r) => Math.max(m, Date.parse(r.posted_at)), 0);
+  if (ENV.postFree && ENV.freeChat && freeToday < ENV.newsFreeMaxPerDay && now - lastFree >= ENV.newsFreeGapMin * 60e3) {
+    const item = news.pickFlash(items, freeAll, {
+      minScore: ENV.newsFreeMinScore, maxAgeMs: ENV.newsBreakingMin * 60e3, cooldownMs, now,
+    });
+    if (item) {
       try {
-        const { text, reply_markup } = M.newsFlash(item, { vipAgoMs: now - Date.parse(cand.posted_at) }, { forFree: true });
+        const { text, reply_markup } = M.newsFlash(item, {}, { forFree: true });
         const msg = await tg.send(ENV.freeChat, text, { reply_markup });
         if (!kuru(msg)) {
           const row = {
-            uid: cand.uid + '-f', title: cand.title, url: cand.url, source: cand.source, score: cand.score,
-            tags: String(cand.tags || ''), channel: 'free', message_id: msg?.message_id ?? null,
+            uid: item.uid + '-f', title: item.title, url: item.url, source: item.source, score: item.score,
+            tags: (item.tags || []).join(','), channel: 'free', message_id: msg?.message_id ?? null,
             published_at: item.at, posted_at: new Date().toISOString(),
           };
           remember(row);
           await db.newsAdd(row).catch((e) => warn('news log write failed (kept in memory):', e.message));
         }
         n++;
-        log(`news → free (${cand.score}p): ${cand.title.slice(0, 70)}`);
+        log(`news → free: ${item.title.slice(0, 70)}`);
       } catch (e) { warn('news → free:', e.message); }
     }
   }
@@ -528,7 +515,7 @@ export async function publishBreakingNews() {
 /* Evening digest: everything else that mattered, one message per channel.
    Stories already posted as a flash that day are left out so it never repeats them. */
 export async function publishNewsDigest() {
-  if (!ENV.newsOn) return 0;
+  if (!ENV.newsOn || !ENV.newsDigestOn) return 0;     // digest is off by default: free gets its stories one by one
   const key = dayKey();
   const news = await import('./news.js');
   let all = [];

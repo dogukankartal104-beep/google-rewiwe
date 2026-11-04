@@ -14,7 +14,7 @@ const min = (m) => NOW - m * 60_000;
 const story = (over = {}) => ({
   uid: 'u1', title: 'Binance suffers a major security breach, funds stolen', url: 'https://ex.com/a?x=1&y=2',
   source: 'Cointelegraph', at: min(10), lang: 'en', score: 90, tags: ['SECURITY'],
-  why: 'Security incidents trigger a sudden flight of liquidity.', tip: N.TIPS.SECURITY, ...over,
+  why: 'Security incidents trigger a sudden flight of liquidity.', tip: N.TIPS.SECURITY, what: N.WHAT.SECURITY, ...over,
 });
 const ctx = {
   btc15: -2.1, rejim: 'aşağı rejim', shock: 1.2,
@@ -28,18 +28,20 @@ test('VIP flash has the desk view; the free one does not', () => {
   const vip = M.newsFlash(story(), ctx, { forFree: false });
   const free = M.newsFlash(story(), { vipAgoMs: 25 * 60_000 }, { forFree: true });
 
-  assert.match(vip.text, /Desk view/);
-  assert.match(vip.text, /Market: BTC 15m -2\.10%/);
-  assert.match(vip.text, /Named in the story: BNB -3\.20% \(24h\) · on our watchlist/);
-  assert.match(vip.text, /Open book: WIF ▼ \+1\.35R/);
+  assert.match(vip.text, /How to trade around it/);
+  assert.match(vip.text, /Market right now: .*calm/);
+  assert.match(vip.text, /Named in the story: BNB \(on our watchlist\)/);
+  assert.match(vip.text, /Open book: WIF short/);
+  assert.match(vip.text, /What could happen/);
   assert.match(vip.text, /System stance/);
   assert.ok(vip.text.includes(N.TIPS.SECURITY.slice(0, 40)), 'the how-to-trade tip');
   assert.equal(vip.reply_markup, undefined, 'VIP members are already inside');
 
-  assert.ok(!/Desk view\*?<\/b>/.test(free.text), 'free must not carry the desk view');
+  assert.ok(!/How to trade around it<\/b>/.test(free.text), 'free must not carry the how-to-trade section');
+  assert.match(free.text, /What could happen/, 'free still gets the plain-language explanation');
   assert.ok(!/Open book|System stance|Named in the story/.test(free.text), 'no live book details for free');
   assert.ok(!free.text.includes(N.TIPS.SECURITY.slice(0, 40)), 'the tip is a VIP perk');
-  assert.match(free.text, /VIP members saw this 25m ago/);
+  assert.match(free.text, /VIP members also get how to trade around the story/);
   assert.ok(free.reply_markup?.inline_keyboard?.[0]?.[0]?.url, 'free story links to VIP');
 });
 
@@ -63,8 +65,8 @@ test('label follows the age: BREAKING only when it really is', () => {
 });
 
 test('the system stance reflects a macro window and a BTC shock', () => {
-  assert.match(M.newsFlash(story(), { ...ctx, macro: { lvl: 'kırmızı' } }).text, /inside a macro window — no new positions/);
-  assert.match(M.newsFlash(story(), { ...ctx, shock: 3.4 }).text, /BTC is in shock — no new positions/);
+  assert.match(M.newsFlash(story(), { ...ctx, macro: { lvl: 'kırmızı' } }).text, /inside a macro window, no new positions/);
+  assert.match(M.newsFlash(story(), { ...ctx, shock: 3.4 }).text, /BTC is in shock, no new positions/);
   assert.match(M.newsFlash(story(), { ...ctx, macro: null }).text, /normal operation/);
 });
 
@@ -211,10 +213,32 @@ test('the scanner really passes the macro window to the decision engine (it was 
 });
 
 /* ======================= SETTINGS ARE SANE ======================= */
-test('free news is far stricter than VIP news', () => {
-  assert.ok(ENV.newsFreeMinScore > ENV.newsMinScore, 'free only gets bigger stories');
-  assert.ok(ENV.newsFreeMaxPerDay <= ENV.newsMaxPerDay, 'free gets fewer posts');
-  assert.ok(ENV.newsFreeMaxPerDay <= 1, 'at most one a day on free');
-  assert.ok(ENV.newsFreeDelayMin >= 10, 'free comes later than VIP');
+test('news volume: free gets up to four stories a day, VIP one very important story', () => {
+  assert.equal(ENV.newsFreeMaxPerDay, 4);
+  assert.equal(ENV.newsMaxPerDay, 1);
+  assert.ok(ENV.newsMinScore >= 70, 'VIP only gets what is very important');
+  assert.ok(ENV.newsFreeMinScore < ENV.newsMinScore, 'free has the lower bar so it can fill four slots');
+  assert.ok(ENV.newsFreeGapMin >= 60, 'free stories are spaced out');
+  assert.equal(ENV.newsDigestOn, false, 'the evening digest is off so free is not flooded');
   assert.ok(ENV.newsBreakingMin <= 120, 'breaking means recent');
+});
+
+test('news posts carry no numbers of our own: no scores, percentages, counters or market statistics', () => {
+  const vip = M.newsFlash(story(), { ...ctx, btc15: -2.1, shock: 1.2, breadth: { up: 39, dn: 1, n: 40 } }).text;
+  const free = M.newsFlash(story(), {}, { forFree: true }).text;
+  const dig = M.newsDigest([story()], { btc15: 0.4, breadth: { up: 39, dn: 1, n: 40 } }, { forFree: true }).text;
+  for (const t of [vip, free, dig]) {
+    const ours = t.split('\n').filter((l) => !l.includes('Binance suffers') && !l.includes('read the story') && !l.includes('read →')).join('\n');
+    assert.ok(!/\d+(\.\d+)?\s?%|\d+↑|↓|\d+\/\d+|×|\d+R\b|\d+m ago|\d+h /.test(ours), 'unexpected number: ' + ours.match(/.{0,20}(\d+(\.\d+)?\s?%|\d+↑|↓|\d+\/\d+|×|\d+R\b).{0,20}/)?.[0]);
+  }
+  assert.match(vip, /most coins are rising/);
+});
+
+test('every topic has a plain explanation of what could happen, without promises', () => {
+  for (const tag of Object.keys(N.TIPS)) {
+    const w = N.WHAT[tag];
+    assert.ok(Array.isArray(w) && w.length >= 2, `missing scenarios for ${tag}`);
+    w.forEach((x) => assert.ok(!/will (rise|fall|pump|dump|crash)|guarantee|certain|sure thing|buy now|sell now|\d/i.test(x), x));
+  }
+  assert.deepEqual(N.scoreItem('Binance hacked, 200M USD stolen').what, N.WHAT.SECURITY);
 });

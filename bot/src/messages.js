@@ -719,101 +719,71 @@ export function eduPost(lesson, { forFree = false, idx = null, total = null } = 
    and our open book. Free gets the story and why it matters, and a pointer to VIP.
    Everything in the desk view comes from live data or from general rules that match what the
    system actually does — nothing is predicted. */
+/* News posts carry no numbers of our own: no scores, counters, percentages or market statistics. Only plain language. */
+const sinceWords = (ms) => (ms <= 45 * 60e3 ? 'just now' : ms <= 6 * 3600e3 ? 'earlier today' : 'today');
+const moodWords = (ctx) => {
+  const out = [];
+  if (ctx.rejim) out.push(regimeEn(ctx.rejim));
+  if (ctx.shock != null) out.push(ctx.shock > 2.5 ? 'the market is jumpy right now ⚠️' : 'the market is calm');
+  if (ctx.breadth && ctx.breadth.n) out.push(ctx.breadth.up > ctx.breadth.dn * 2 ? 'most coins are rising' : ctx.breadth.dn > ctx.breadth.up * 2 ? 'most coins are falling' : 'the market is mixed');
+  return out;
+};
+
 export function newsFlash(item, ctx = {}, { forFree = false } = {}) {
-  const ageMin = Math.max(0, (Date.now() - item.at) / 60000);
-  const label = ageMin <= 45 ? '🚨 <b>BREAKING</b>' : '📰 <b>NEWS</b>';
+  const age = Date.now() - item.at;
+  const label = age <= 45 * 60e3 ? '🚨 <b>BREAKING</b>' : '📰 <b>NEWS</b>';
   const lines = [];
   lines.push(`${label}${item.tags?.length ? ` · ${esc(item.tags[0])}` : ''}`);
   lines.push('');
   lines.push(`<b>${esc(item.title)}</b>`);
-  lines.push(`<i>${esc(item.source)} · ${dur(Date.now() - item.at)} ago</i>`);
+  lines.push(`<i>${esc(item.source)} · ${sinceWords(age)}</i>`);
   if (item.url) lines.push(`<a href="${escAttr(item.url)}">read the story →</a>`);
   lines.push('');
-  if (item.why) {
-    lines.push('<b>Why it matters</b>');
-    lines.push(esc(item.why));
-    lines.push('');
-  }
+  if (item.why) { lines.push('<b>Why it matters</b>'); lines.push(esc(item.why)); lines.push(''); }
+  if (item.what?.length) { lines.push('<b>What could happen</b>'); item.what.forEach((w) => lines.push(`• ${esc(w)}`)); lines.push(''); }
 
   if (!forFree) {
-    lines.push('<b>Desk view</b>');
+    lines.push('<b>How to trade around it</b>');
     if (item.tip) lines.push(`• ${esc(item.tip)}`);
-
-    const mk = [];
-    if (ctx.btc15 != null) mk.push(`BTC 15m ${pct(ctx.btc15)}`);
-    if (ctx.rejim) mk.push(regimeEn(ctx.rejim));
-    if (ctx.shock != null) mk.push(`shock ${fmt(ctx.shock, 1)}× ATR ${ctx.shock > 2.5 ? '⚠️' : '✓ calm'}`);
-    if (mk.length) lines.push(`• Market: ${mk.join(' · ')}`);
-
-    if (ctx.coins?.length) {
-      lines.push('• Named in the story: ' + ctx.coins
-        .map((c) => `${esc(c.base)} ${pct(c.chg)} (24h)${c.watch ? ' · on our watchlist' : ''}`).join(' · '));
-    }
-    if (ctx.open?.length) {
-      lines.push('• Open book: ' + ctx.open.slice(0, 3)
-        .map((o) => `${sym(o.symbol)} ${o.dir === 'L' ? '▲' : '▼'} ${o.open_r > 0 ? '+' : ''}${fmt(o.open_r, 2)}R`).join(' · '));
-    }
+    const mood = moodWords(ctx);
+    if (mood.length) lines.push(`• Market right now: ${mood.join(', ')}.`);
+    if (ctx.coins?.length) lines.push('• Named in the story: ' + ctx.coins.map((c) => `${esc(c.base)}${c.watch ? ' (on our watchlist)' : ''}`).join(', '));
+    if (ctx.open?.length) lines.push('• Open book: ' + ctx.open.slice(0, 3).map((o) => `${sym(o.symbol)} ${o.dir === 'L' ? 'long' : 'short'}`).join(', '));
     const macroRed = ctx.macro?.lvl === 'kırmızı';
-    lines.push('• System stance: ' + (
-      macroRed ? 'inside a macro window — no new positions until it passes.'
-        : ctx.shock > 2.5 ? 'BTC is in shock — no new positions, the structure is not reliable.'
-          : 'normal operation. A headline changes no rule; a setup still needs all three phases.'));
+    lines.push('• System stance: ' + (macroRed ? 'inside a macro window, no new positions until it passes.'
+      : ctx.shock > 2.5 ? 'BTC is in shock, no new positions while the structure is unreliable.'
+        : 'normal operation. A headline changes no rule; a setup still needs all three phases.'));
     lines.push('');
   } else {
-    lines.push(ctx.vipAgoMs != null
-      ? `VIP members saw this ${dur(ctx.vipAgoMs)} ago, with the desk view: how to trade around it, the live market state and our open book ⤵️`
-      : 'VIP members get the desk view with every story: how to trade around it, the live market state and our open book ⤵️');
+    lines.push('VIP members also get how to trade around the story, the live market state and our open book ⤵️');
     lines.push('');
   }
-
-  if (item.lang === 'tr') {
-    lines.push('<i>Headline kept in the source language to avoid translation drift.</i>');
-    lines.push('');
-  }
+  if (item.lang === 'tr') { lines.push('<i>Headline kept in the source language to avoid translation drift.</i>'); lines.push(''); }
   lines.push(`<i>${RISK}</i>`);
-  return forFree
-    ? { text: lines.join('\n'), reply_markup: vipBtn('news') }
-    : { text: lines.join('\n') };
+  return forFree ? { text: lines.join('\n'), reply_markup: vipBtn('news') } : { text: lines.join('\n') };
 }
 
 export function newsDigest(items, ctx = {}, { forFree = false } = {}) {
   const lines = [];
-  lines.push(`📰 <b>TODAY IN CRYPTO</b> · ${trShort(Date.now())}`);
+  lines.push('📰 <b>TODAY IN CRYPTO</b>');
   lines.push('');
   if (!items.length) {
-    lines.push(ctx.flashToday
-      ? 'The big story of the day was covered above — nothing else moved the market.'
-      : 'Nothing market-moving surfaced today. A quiet day is not a bad day — the system keeps waiting for a setup.');
+    lines.push(ctx.flashToday ? 'The big story of the day was covered above, nothing else moved the market.' : 'Nothing market-moving surfaced today. A quiet day is not a bad day: the system keeps waiting for a setup.');
     lines.push('');
   } else {
-    items.forEach((it, i) => {
-      lines.push(`<b>${i + 1}.</b> ${esc(it.title)}`);
+    items.forEach((it) => {
+      lines.push(`• ${esc(it.title)}`);
       lines.push(`<i>${esc(it.source)}${it.tags?.length ? ' · ' + esc(it.tags.join(', ')) : ''}</i>`);
       if (it.url) lines.push(`<a href="${escAttr(it.url)}">read →</a>`);
       lines.push('');
     });
   }
-  const d = [];
-  if (ctx.btc15 != null) d.push(`BTC 15m ${pct(ctx.btc15)}`);
-  if (ctx.rejim) d.push(regimeEn(ctx.rejim));
-  if (ctx.breadth) d.push(`${ctx.breadth.up}↑/${ctx.breadth.dn}↓`);
-  if (d.length) {
-    lines.push('<b>Market state:</b> ' + d.join(' · '));
-    lines.push('');
-  }
-  if (!forFree && items[0]?.tip) {
-    lines.push('<b>Desk view</b>');
-    lines.push(`• ${esc(items[0].tip)}`);
-    lines.push('');
-  }
-  if (forFree) {
-    lines.push('VIP gets the desk view on every story — how to trade around it, and what our open book is doing ⤵️');
-    lines.push('');
-  }
+  const mood = moodWords(ctx);
+  if (mood.length) { lines.push('<b>Market state:</b> ' + mood.join(', ') + '.'); lines.push(''); }
+  if (!forFree && items[0]?.tip) { lines.push('<b>How to trade around it</b>'); lines.push(`• ${esc(items[0].tip)}`); lines.push(''); }
+  if (forFree) { lines.push('VIP gets how to trade around every story and what our open book is doing ⤵️'); lines.push(''); }
   lines.push(`<i>${RISK}</i>`);
-  return forFree
-    ? { text: lines.join('\n'), reply_markup: vipBtn('news') }
-    : { text: lines.join('\n') };
+  return forFree ? { text: lines.join('\n'), reply_markup: vipBtn('news') } : { text: lines.join('\n') };
 }
 
 // kept for backward compatibility with older imports
@@ -845,22 +815,31 @@ export function v1kSignal(row, key = null) {
   lines.push(`<i>${RISK}</i>`);
   return lines.join('\n');
 }
-export function v1kStats(rows) {
-  const closed = rows.filter((r) => r.variants?.K1?.state === 'closed' && r.features?.pub?.vip_at);
-  const nets = closed.map((r) => r.variants.K1.net);
-  return { n: nets.length, wins: nets.filter((x) => x > 0).length, mean: nets.length ? nets.reduce((a, b) => a + b, 0) / nets.length : null };
+const SHOWCASE_NOTE = 'Showcase: we show selected positions that are in profit when posted. Not every signal is shown. The final result of every showcased position is posted here, wins and losses.';
+export function v1kShowcase(row, profitPct) {
+  const f = row.features || {};
+  const D = f.px >= 100 ? 2 : f.px >= 1 ? 4 : f.px >= 0.01 ? 5 : 7;
+  const lines = [];
+  lines.push('📈 <b>POSITION IN PROFIT</b> · extreme pump fade');
+  lines.push(`🔻 <b>${sym(row.symbol)}</b> · SHORT`);
+  lines.push('');
+  lines.push(`The coin had already pumped hard, BTC was weak and new open interest was drying up when the system took the short around <b>${fmt(f.px, D)}</b>.`);
+  lines.push(`It is currently <b>+${fmt(profitPct, 1)}%</b> in profit and still open. The result will be posted when it closes, whatever it is.`);
+  lines.push('');
+  lines.push('VIP members get more tools, analysis and the system\'s live signals ⤵️');
+  lines.push('');
+  lines.push(`<i>${SHOWCASE_NOTE}</i>`);
+  lines.push(`<i>${RISK}</i>`);
+  return { text: lines.join('\n'), reply_markup: vipBtn('v1k', row.key || null) };
 }
-export function v1kResult(row, st, { forFree = false } = {}) {
-  const v = row.variants.K1, f = row.features || {};
+export function v1kResult(row) {
+  const v = row.variants.K1;
   const win = v.net > 0;
   const lines = [];
-  lines.push(`${win ? '✅' : '🔴'} <b>v1k RESULT · ${sym(row.symbol)}</b> · SHORT`);
-  lines.push(`${v.exit === 'stop' ? 'Stopped out at +50%' : 'Closed after 24h'}: <b>${v.net > 0 ? '+' : ''}${fmt(v.net, 1)}%</b> of the position (after fees and funding)`);
-  lines.push(`On a 5% position that is ${v.net > 0 ? '+' : ''}${fmt(v.net * 0.05, 2)}% of the account.`);
+  lines.push(`${win ? '✅' : '🔴'} <b>RESULT · ${sym(row.symbol)}</b> · SHORT`);
+  lines.push(`${v.exit === 'stop' ? 'Stopped out' : 'Closed after 24 hours'}: <b>${v.net > 0 ? '+' : ''}${fmt(v.net, 1)}%</b> of the position (after fees and funding).`);
   lines.push('');
-  lines.push(`Track record of this rule so far: <b>${st.n}</b> closed signal${st.n === 1 ? '' : 's'}, <b>${st.wins}</b> won, average <b>${st.mean == null ? '—' : (st.mean > 0 ? '+' : '') + fmt(st.mean, 1) + '%'}</b> per trade. Small sample: treat it as unproven.`);
-  if (forFree) { lines.push(''); lines.push('VIP gets the signal the moment it fires, with entry, stop and exit time ⤵️'); }
-  lines.push('');
+  lines.push(`<i>${SHOWCASE_NOTE}</i>`);
   lines.push(`<i>${RISK}</i>`);
-  return { text: lines.join('\n'), reply_markup: forFree ? vipBtn('v1k', row.key || null) : undefined };
+  return { text: lines.join('\n') };
 }
