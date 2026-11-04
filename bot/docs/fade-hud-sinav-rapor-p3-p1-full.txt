@@ -1,0 +1,235 @@
+PROTOCOL 3 MEASUREMENTS · 2026-11-04T04:59:33.494Z · trades 87786 · one per coin at a time: discovery 6653, decision 15096
+
+A. EXIT GRID (stop x original risk / target in R / hold candles) · mean net % per trade, costs included, no funding
+cell            discovery mean (n)       decision mean (n)    BH significant on decision
+1.5/2/48           1.375 ( 6653)         0.177 (15096)      no
+1.25/2/48          1.340 ( 6653)         0.128 (15096)      no
+1/2/48             1.194 ( 6653)         0.131 (15096)      no
+1.5/2/32           1.150 ( 6653)         0.219 (15096)      no
+1.5/1.5/48         1.131 ( 6653)         0.154 (15096)      no
+1.25/2/32          1.113 ( 6653)         0.172 (15096)      no
+1.25/1.5/48        1.097 ( 6653)         0.110 (15096)      no
+0.75/2/48          1.087 ( 6653)         0.093 (15096)      no
+1.5/1.5/32         1.023 ( 6653)         0.176 (15096)      no
+1/2/32             1.012 ( 6653)         0.161 (15096)      no
+1.25/1.5/32        0.979 ( 6653)         0.138 (15096)      no
+1/1.5/48           0.963 ( 6653)         0.125 (15096)      no
+0.75/2/32          0.929 ( 6653)         0.136 (15096)      no
+1/1.5/32           0.880 ( 6653)         0.139 (15096)      no
+0.75/1.5/48        0.849 ( 6653)         0.095 (15096)      no
+0.75/1.5/32        0.786 ( 6653)         0.122 (15096)      no
+1.5/1/48           0.750 ( 6653)         0.094 (15096)      no
+1.5/1/32           0.741 ( 6653)         0.108 (15096)      no
+1.25/1/48          0.726 ( 6653)         0.058 (15096)      no
+1.5/2/16           0.718 ( 6653)         0.128 (15096)      no
+1.25/2/16          0.713 ( 6653)         0.086 (15096)      no
+1/2/16             0.704 ( 6653)         0.073 (15096)      no
+1.25/1/32          0.704 ( 6653)         0.074 (15096)      no
+1.5/1.5/16         0.678 ( 6653)         0.123 (15096)      no
+0.75/2/16          0.677 ( 6653)         0.056 (15096)      no
+1.25/1.5/16        0.664 ( 6653)         0.085 (15096)      no
+1/1.5/16           0.655 ( 6653)         0.080 (15096)      no
+1/1/48             0.633 ( 6653)         0.056 (15096)      no
+1/1/32             0.630 ( 6653)         0.069 (15096)      no
+0.75/1.5/16        0.629 ( 6653)         0.068 (15096)      no
+0.75/1/32          0.557 ( 6653)         0.057 (15096)      no
+1.5/1/16           0.556 ( 6653)         0.092 (15096)      no
+0.75/1/48          0.554 ( 6653)         0.034 (15096)      no
+1.25/1/16          0.546 ( 6653)         0.055 (15096)      no
+1/1/16             0.534 ( 6653)         0.051 (15096)      no
+1.25/0.75/48       0.531 ( 6653)         0.052 (15096)      no
+1.5/0.75/32        0.525 ( 6653)         0.079 (15096)      no
+1.5/0.75/48        0.520 ( 6653)         0.077 (15096)      no
+1.25/0.75/32       0.519 ( 6653)         0.056 (15096)      no
+0.75/1/16          0.516 ( 6653)         0.036 (15096)      no
+1/0.75/48          0.443 ( 6653)         0.043 (15096)      no
+1/0.75/32          0.442 ( 6653)         0.042 (15096)      no
+1.5/0.75/16        0.439 ( 6653)         0.074 (15096)      no
+1.25/0.75/16       0.438 ( 6653)         0.046 (15096)      no
+1/0.75/16          0.419 ( 6653)         0.036 (15096)      no
+0.75/0.75/16       0.403 ( 6653)         0.020 (15096)      no
+0.75/0.75/32       0.392 ( 6653)         0.031 (15096)      no
+0.75/0.75/48       0.385 ( 6653)         0.026 (15096)      no
+1.5/0.5/48         0.287 ( 6653)        -0.052 (15096)      no
+1.5/0.5/32         0.285 ( 6653)        -0.046 (15096)      no
+1.25/0.5/48        0.274 ( 6653)        -0.071 (15096)      no
+1.25/0.5/32        0.270 ( 6653)        -0.066 (15096)      no
+1.25/0.5/16        0.256 ( 6653)        -0.080 (15096)      no
+1.5/0.5/16         0.255 ( 6653)        -0.060 (15096)      no
+1/0.5/16           0.227 ( 6653)        -0.077 (15096)      no
+1/0.5/32           0.210 ( 6653)        -0.072 (15096)      no
+1/0.5/48           0.208 ( 6653)        -0.075 (15096)      no
+0.75/0.5/16        0.205 ( 6653)        -0.082 (15096)      no
+0.75/0.5/32        0.183 ( 6653)        -0.076 (15096)      no
+0.75/0.5/48        0.179 ( 6653)        -0.082 (15096)      no
+
+Chosen on DISCOVERY: 1.5/2/48 (discovery 1.375%). Its DECISION result: 0.177% over 15096 trades. Protocol 1 cell (1/1/32) on decision: 0.069%.
+chosen cell, decision: mean 0.177% median -0.149% win 49.5% LB90 0.002% halves 0.412 / -0.058
+VERDICT A: the chosen cell is positive on decision, beats protocol 1 and its lower bound is above zero.
+
+MFE / MAE inside 32 candles from the fill (in R, stop ignored): median MFE 1.17, median MAE 0.86
+share of trades whose price reached +0.5R 80.8% · +1R 56.9% · +1.5R 37.9% · +2R 24.3%
+winners (n=9832) median MAE 0.41R before/around success; losers (n=8261) median MFE 0.68R before the stop
+tie rule bounds, decision: stop wins 0.069%  <->  target wins 0.168%  (the gap is how much the same-candle assumption could matter)
+
+B. COST SENSITIVITY · decision period, mean net % (gross minus costs; funding left out)
+round-trip bp →            10      20      30      40      60
+stop slippage  0 bp      0.248   0.148   0.048  -0.052  -0.252
+stop slippage 20 bp      0.169   0.069  -0.031  -0.131  -0.331
+stop slippage 40 bp      0.090  -0.010  -0.110  -0.210  -0.410
+gross mean 0.348% · share of stop exits 39.4% · break-even round-trip cost with 20 bp stop slippage: 26.9 bp
+
+C. STABILITY (mean net % with costs and funding · n)
+by month
+  2025-01       0.826  n=334
+  2025-02       2.574  n=1899
+  2025-03      -0.468  n=438
+  2025-04      -0.127  n=835
+  2025-05       0.065  n=683
+  2025-06      -0.548  n=244
+  2025-07      -0.008  n=767
+  2025-08      -0.685  n=441
+  2025-09      -0.386  n=1012
+  2025-10       0.589  n=2304
+  2025-11       0.078  n=1669
+  2025-12       0.167  n=843
+  2026-01       0.286  n=987
+  2026-02       0.083  n=842
+  2026-03      -0.285  n=701
+  2026-04      -0.165  n=1608
+  2026-05      -0.195  n=796
+  2026-06      -0.513  n=1276
+  2026-07      -0.498  n=845
+  2026-08       0.305  n=1212
+  2026-09      -0.144  n=1100
+  2026-10       0.310  n=860
+  2026-11      -0.462  n=53
+by quarter
+  2025Q1        1.857  n=2671
+  2025Q2       -0.111  n=1762
+  2025Q3       -0.315  n=2220
+  2025Q4        0.338  n=4816
+  2026Q1        0.060  n=2530
+  2026Q2       -0.292  n=3680
+  2026Q3       -0.066  n=3157
+  2026Q4        0.265  n=913
+by hour UTC
+  00           -0.103  n=901
+  01            0.558  n=1064
+  02            0.396  n=1011
+  03            1.031  n=1097
+  04            0.701  n=988
+  05            0.302  n=891
+  06            0.396  n=1003
+  07            0.628  n=1008
+  08            0.456  n=956
+  09           -0.061  n=964
+  10           -0.141  n=847
+  11           -0.062  n=854
+  12            0.083  n=800
+  13           -0.142  n=793
+  14            0.423  n=1034
+  15            0.550  n=1092
+  16            0.403  n=1043
+  17           -0.270  n=1019
+  18           -0.365  n=857
+  19            0.194  n=740
+  20           -0.289  n=719
+  21           -0.221  n=659
+  22           -0.095  n=673
+  23            0.030  n=736
+by weekday (0=Sun)
+  0            -0.078  n=2745
+  1             1.051  n=4164
+  2            -0.131  n=2637
+  3            -0.060  n=2573
+  4            -0.058  n=2808
+  5            -0.030  n=3186
+  6             0.384  n=3636
+by session
+  abd           0.114  n=6398
+  asya          0.506  n=8083
+  avrupa        0.019  n=5190
+  ölü saat     -0.059  n=2078
+by side
+  L             0.631  n=8374
+  S            -0.036  n=13375
+by grade
+  A             0.312  n=4532
+  B             0.293  n=9697
+  C             0.073  n=7520
+by setup type
+  karışık       0.073  n=7520
+  likidasyon    0.360  n=2244
+  spot          0.307  n=10753
+  squeeze       0.121  n=1232
+by BTC 24h regime
+  -3..0%       -0.003  n=7804
+  0..3%        -0.011  n=8527
+  < -3%         1.504  n=3476
+  > 3%         -0.162  n=1942
+coin concentration: 670 coins, total 4802.5 (sum of % per trade). Top 10 coins contribute 18% of it (AIXBT, CYS, EVAA, RARE, PIPPIN, MEME, PHA, VIC, SWARMS, MYX).
+mean per trade without the 10 best coins: 0.190% (all coins: 0.221%)
+days with signals 668; days with 3+ signals 653, of which 263 are mostly one direction (the same market move counted several times).
+
+D. ENTRY FEATURES (protocol 2 list + protocol 3 additions) · 2026-11-04T04:59:34.162Z · k=3 perDay=2 threshold=p80 · 30 features
+signals (filled, one per coin at a time): discovery 6653, decision 15096
+
+WINNERS (target) 3233 vs LOSERS (stop) 2313 · discovery · median of each feature
+feature      winners     losers    rank-corr with net   months agreeing
+riskPct         6.000      5.450      0.203   8/9
+hrsSinceSig      1.000      4.000     -0.199   9/9
+btc24          -0.309      0.327     -0.181   5/9
+limDist         0.059      0.000      0.166   8/9
+chg24           8.750     11.969     -0.162   3/9
+ret4           -1.782     -0.858     -0.157   9/9
+oi4h           -0.886      0.667     -0.138   7/9
+oi24h          -1.336      3.726     -0.132   6/9
+dow             1.000      3.000     -0.123   4/9
+leg            24.990     22.778      0.119   6/9
+absChg         19.019     16.978      0.116   6/9
+globalLS        1.507      1.302      0.115   5/9
+volX            0.884      0.981     -0.093   8/9
+btc1h           0.040      0.008      0.090   4/9
+trN             2.000      2.000      0.088   4/9
+oi1h           -0.739     -0.410     -0.086   8/9
+ratio           5.578      4.377      0.085   3/9
+hr             10.000     11.000     -0.072   5/9
+atrPct          3.119      3.125      0.066   8/9
+sigCount30d     20.000     27.000     -0.066   4/9
+topLS           1.418      1.344      0.057   7/9
+oiOverVol       0.084      0.084     -0.057   7/9
+oiChg           2.474      3.397     -0.056   4/9
+prem            0.000      0.000     -0.031   4/9
+fundNow         0.005      0.005     -0.027   6/9
+qv24            8.024      8.085     -0.017   4/9
+sweep           0.000      0.000     -0.015   7/9
+rrPlan          1.000      1.000      0.003   7/9
+takerLS         0.985      1.008      0.002   2/9
+exN             3.000      3.000      0.002   6/9
+
+Benjamini-Hochberg (q=0.10) on the feature correlations: riskPct, hrsSinceSig, btc24, limDist, chg24, ret4, oi4h, oi24h, dow, leg, absChg, globalLS, volX, btc1h, trN, oi1h, ratio, hr, atrPct, sigCount30d, topLS, oiOverVol, oiChg, prem, fundNow
+
+CHOSEN FOR THE SCORE (stable sign across months, largest |rho|): riskPct(+), hrsSinceSig(-), limDist(+)
+threshold = discovery score percentile 80 = 1.418
+
+== DISCOVERY (in-sample, optimistic) ==
+all signals     n=6653 mean 0.611%
+selected        n=401 (1.47 per day with signals) mean -0.178% median 0.954% win 51.4% LB90 -0.573% halves 0.318 / -0.672 exTop5 -0.257
+random picks   same number per day: mean -0.223% (95th pct of random 0.195%)
+equity (10% at 2x): return -15.5% · max drawdown -25.7% · halves 12.1% / -24.7%
+
+== DECISION (the exam) ==
+all signals     n=15096 mean 0.049%
+selected        n=774 (1.95 per day with signals) mean -0.041% median 2.773% win 52.6% LB90 -0.346% halves -0.049 / -0.032 exTop5 -0.085
+random picks   same number per day: mean -0.097% (95th pct of random 0.207%)
+equity (10% at 2x): return -11.1% · max drawdown -28.7% · halves -6.5% / -5.0%
+
+PASS CONDITIONS
+FAIL  1. mean net % > 0
+FAIL  2. 90% lower bound > 0
+FAIL  3. both halves positive
+FAIL  4. mean without best 5 > 0
+FAIL  5. beats the 95th percentile of random picks
+FAIL  6. equity: both halves positive, drawdown not worse in 2nd
+RESULT: DOES NOT PASS

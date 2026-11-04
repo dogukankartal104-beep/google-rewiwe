@@ -1,0 +1,51 @@
+PROTOCOL 2 · 2026-11-04T04:59:31.482Z · k=3 perDay=2 threshold=p80 · 20 features
+signals (filled, one per coin at a time): discovery 6653, decision 15096
+
+WINNERS (target) 3233 vs LOSERS (stop) 2313 · discovery · median of each feature
+feature      winners     losers    rank-corr with net   months agreeing
+riskPct         6.000      5.450      0.203   8/9
+btc24          -0.309      0.327     -0.181   5/9
+limDist         0.059      0.000      0.166   8/9
+chg24           8.750     11.969     -0.162   3/9
+ret4           -1.782     -0.858     -0.157   9/9
+dow             1.000      3.000     -0.123   4/9
+leg            24.990     22.778      0.119   6/9
+absChg         19.019     16.978      0.116   6/9
+volX            0.884      0.981     -0.093   8/9
+btc1h           0.040      0.008      0.090   4/9
+trN             2.000      2.000      0.088   4/9
+ratio           5.578      4.377      0.085   3/9
+hr             10.000     11.000     -0.072   5/9
+atrPct          3.119      3.125      0.066   8/9
+oiChg           2.474      3.397     -0.056   4/9
+fundNow         0.005      0.005     -0.027   6/9
+qv24            8.024      8.085     -0.017   4/9
+sweep           0.000      0.000     -0.015   7/9
+rrPlan          1.000      1.000      0.003   7/9
+exN             3.000      3.000      0.002   6/9
+
+Benjamini-Hochberg (q=0.10) on the feature correlations: riskPct, btc24, limDist, chg24, ret4, dow, leg, absChg, volX, btc1h, trN, ratio, hr, atrPct, oiChg, fundNow
+
+CHOSEN FOR THE SCORE (stable sign across months, largest |rho|): riskPct(+), limDist(+), ret4(-)
+threshold = discovery score percentile 80 = 1.584
+
+== DISCOVERY (in-sample, optimistic) ==
+all signals     n=6653 mean 0.611%
+selected        n=394 (1.45 per day with signals) mean 0.181% median 2.395% win 55.1% LB90 -0.181% halves 0.565 / -0.203 exTop5 0.105
+random picks   same number per day: mean -0.254% (95th pct of random 0.139%)
+equity (10% at 2x): return 12.4% · max drawdown -19.3% · halves 23.4% / -8.9%
+
+== DECISION (the exam) ==
+all signals     n=15096 mean 0.049%
+selected        n=766 (1.93 per day with signals) mean 0.148% median 3.551% win 54.3% LB90 -0.145% halves 0.383 / -0.087 exTop5 0.105
+random picks   same number per day: mean -0.101% (95th pct of random 0.243%)
+equity (10% at 2x): return 19.1% · max drawdown -25.4% · halves 30.5% / -8.7%
+
+PASS CONDITIONS
+PASS  1. mean net % > 0
+FAIL  2. 90% lower bound > 0
+FAIL  3. both halves positive
+PASS  4. mean without best 5 > 0
+FAIL  5. beats the 95th percentile of random picks
+FAIL  6. equity: both halves positive, drawdown not worse in 2nd
+RESULT: DOES NOT PASS
