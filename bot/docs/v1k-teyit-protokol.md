@@ -36,4 +36,9 @@ en sade olan (filtresiz P1 < P2 < P1F < P2F, en az bileşen) seçilir. Geçmezse
 `bot/docs/v1k-teyit-rapor.md`, betik `bot/bt/v1/teyit.js`.
 
 ## EK
-(boş)
+- EK-1 (2026-11-04, sonuç görüldükten SONRA ama aşağıdaki sonuç hesaplanmadan ÖNCE yazıldı; yeni, ayrı bir hipotez): "v1p yalnız hiçbir v1k pozisyonu açık değilken
+  girer" kuralı. Gerekçe: ilk testte v1p, v1k ile aynı olayları yakalayıp hesabı bozdu (günlük korelasyon 0.6+). Eşzamanlı pozisyonu yasaklamak bunu
+  önleyebilir. Kural: bir v1p sinyali, girişi anında v1k K1 akışında (herhangi bir coin) açık pozisyon varsa atlanır; yoksa alınır. Dönem ve bölme aynı
+  (DOĞRULAMA 2026-03-02 sonrası). Geçme şartı (sabit): DOĞRULAMA'da kabul edilen v1p sinyali n ≥ 60; ortalama > 0; %90 alt uç > 0; iki yarıda da ortalama
+  > 0; 15 dk gecikmede ortalama > 0; birleşik hesapta (v1k K1 + kabul edilen v1p, aynı anda en çok 3) getiri > v1k K1 tek başına getirisi ve düşüş ≤ %30.
+  4 hücre denendiği için şans payı vardır (BH raporlanır). Birden fazla hücre geçerse en sade (P1 < P2 < P1F < P2F). Geçmezse v1p yayına alınmaz.
