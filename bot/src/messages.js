@@ -791,7 +791,7 @@ export const nasilMsg = howMsg;
 
 
 /* ============================================================
-   v1k pump fade (experimental, live forward test). Honest wording: no performance claims, risk stated, every result posted.
+   v1k pump fade. Wording: no performance claims, risk stated, every result posted.
    ============================================================ */
 const utc = (t) => new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
 export function v1kSignal(row, key = null) {
@@ -800,7 +800,7 @@ export function v1kSignal(row, key = null) {
   const p = (v) => fmt(v, D);
   const t0 = Date.parse(row.sig_at);
   const lines = [];
-  lines.push('🧪 <b>EXPERIMENTAL · extreme pump fade</b>');
+  lines.push('🔻 <b>EXTREME PUMP FADE</b>');
   lines.push(`🔻 <b>${sym(row.symbol)}</b> · SHORT`);
   lines.push('');
   lines.push(`Entry: around <b>${p(px)}</b> (close of the signal candle)`);
@@ -810,7 +810,7 @@ export function v1kSignal(row, key = null) {
   lines.push(`Why: <b>${pct(f.chg24)}</b> in 24h, <b>${pct(f.r15)}</b> in the last 15m, BTC weak (${pct(f.btc24)} / 24h), new open interest is drying up (${f.oi15 == null ? 'n/a' : pct(f.oi15)} in 15m).`);
   lines.push('');
   lines.push('<b>Size: 1x leverage only, at most 5% of your account.</b> A stop-out costs about 2.5% of the account. A stop at +50% means 2x or more can be liquidated before it triggers.');
-  lines.push('This rule is in a live forward test. Every result, wins and losses, is posted. It has no proven track record yet.');
+  lines.push('Every result, wins and losses, is posted here. No guarantees: any trade can hit its stop.');
   lines.push('');
   lines.push(`<i>${RISK}</i>`);
   return lines.join('\n');

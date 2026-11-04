@@ -205,7 +205,7 @@ async function publishNew(key) {
   const today = (await db.q("select count(*)::int as n from shadow_engine where engine=$1 and (features->'pub'->>'vip_at')::bigint >= $2", [ENGINE, day0.getTime()]))[0]?.n || 0;
   if (today >= ENV.v1kVipPerDay) { log(`v1k VIP daily cap reached, not published: ${row.symbol}`); return; }
   const px = row.features.px;
-  const png = await levelChartPng({ symbol: row.symbol, tag: 'SHORT SIGNAL', lines: [{ price: px, label: 'ENTRY', color: CHART_COLORS.blue }, { price: px * 1.5, label: 'STOP', color: CHART_COLORS.dn }], badge: { big: 'SHORT', small: 'exit in 24h · 1x only · max 5%', color: CHART_COLORS.dn }, foot: 'Experimental rule in live forward test. Not financial advice.' });
+  const png = await levelChartPng({ symbol: row.symbol, tag: 'SHORT SIGNAL', lines: [{ price: px, label: 'ENTRY', color: CHART_COLORS.blue }, { price: px * 1.5, label: 'STOP', color: CHART_COLORS.dn }], badge: { big: 'SHORT', small: 'exit in 24h · 1x only · max 5%', color: CHART_COLORS.dn }, foot: 'Not financial advice. Leveraged trading can lose your entire capital.' });
   const msg = await tg.sendCard(ENV.vipChat, png, M.v1kSignal(row));
   if (msg && !msg.dry) { await setPub(row.id, { vip_at: Date.now(), vip_msg: msg.message_id || null }); log(`v1k signal published to VIP: ${row.symbol}`); }
 }
