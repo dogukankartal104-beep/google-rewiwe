@@ -66,3 +66,25 @@ test('check events: price, OI change, trigger on the first 15m close that satisf
   assert.equal(firstTrigger(ce, () => false, k, 0), null);
   assert.ok(CELLS_EARLY.O1({ dOI: 61, P: 16 }) && !CELLS_EARLY.O1({ dOI: 61, P: 14 }));
 });
+
+import { engineEntry, FILTER_OI15 } from '../bt/v1/engine.js';
+
+test('engine: E1 waits for the first red 15m candle, then enters at the next 1m open', () => {
+  // 1m candles from t=0. Candles 0-14 green (up), 15-29 red (down), then flat.
+  const rows = [];
+  for (let i = 0; i < 30; i++) rows.push(i < 15 ? [100 + i * 0.1, 101 + i * 0.1, 99, 100.5 + i * 0.1] : [102, 102.2, 99, 100]);
+  for (let i = 0; i < 1600; i++) rows.push([100, 100.1, 99.9, 100]);
+  const k = mk(rows);
+  const r = engineEntry({ k, i0: 0, tSig: 0, useE1: true });
+  assert.equal(r.ok, true); assert.equal(r.tEntry, 30 * M);
+  const none = engineEntry({ k: mk([...rows.slice(0, 15).map((x) => x), ...Array.from({ length: 1700 }, (_, i) => [101 + i * 0.001, 101.2 + i * 0.001, 100.9, 101.1 + i * 0.001])]), i0: 0, tSig: 0, useE1: true });
+  assert.equal(none.skip, true);
+});
+
+test('engine: stop is the signal price x 1.5 for every variant, 24h counted from the signal', () => {
+  const rows = [[100, 100, 100, 100], [100, 100, 100, 100], [100, 151, 100, 150], ...Array(1600).fill([150, 150, 150, 150])];
+  const r = engineEntry({ k: mk(rows), i0: 0, tSig: 0 });
+  assert.equal(r.exit, 'stop');
+  assert.ok(r.net < -49);
+  assert.equal(FILTER_OI15, 6.01);
+});
