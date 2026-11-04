@@ -431,32 +431,29 @@ export function vipMsg(plans, lang = 'en') {
   if (lang === 'tr') {
     lines.push('⭐ <b>VIP ÜYELİK</b>', '');
     lines.push('<b>VIP\'te ne var?</b>');
-    lines.push('• Sinyal <b>anında</b> — giriş, stop, TP1, TP2, R:R');
-    lines.push('• <b>Pozisyon boyutu</b> — hesabına göre kaç lot, kaç dolar risk');
-    lines.push('• Günlük brifing — izleme listesi, tetik bekleyen kurulumlar, rejim filtreleri');
-    lines.push('• Açık pozisyon takibi ve kısmi çıkış bildirimleri');
-    lines.push('• Haftalık + aylık detaylı performans dökümü', '');
+    lines.push('• Sinyal <b>anında</b> — giriş, stop ve çıkış saati, grafikle birlikte');
+    lines.push('• Aşırı pump yapmış coinlerde <b>SHORT</b> sinyalleri (günde en fazla 2)');
+    lines.push('• Her sonuç burada paylaşılır — <b>kazanç da kayıp da</b>');
+    lines.push('• Haftalık sonuç kartı', '');
     lines.push('<b>Ücretsiz kanalda ne var?</b>');
-    lines.push(`• Günde 1 sinyal, ${ENV.freeDelayMin} dk gecikmeli ve <b>seviyesiz</b>`);
-    lines.push('• Günlük analiz, kapanış özeti, performans tabloları', '');
+    lines.push('• Kapanmış, kazanan işlemlerden örnekler — VIP\'ten 24 saat sonra');
+    lines.push('• Haber akışı ve eğitim içerikleri', '');
+    lines.push('<b>Sistem nasıl çalışır?</b>');
+    lines.push('Tahmin etmez. 24 saatte +%50 ve üstü yükselmiş, son 15 dakikada sert pump yapmış coinleri tarar;');
+    lines.push('açık pozisyon verisi (OI) ve piyasa filtreleriyle eler. Çoğu gün <b>sinyal olmaz veya az olur</b> — bu bilinçli.', '');
   } else {
     lines.push('⭐ <b>VIP MEMBERSHIP</b>', '');
-    lines.push('Most channels sell you a coin name and an arrow. This one sells you a <b>plan</b>.', '');
     lines.push('<b>What VIP gets</b>');
-    lines.push('• Every signal <b>the second it fires</b> — entry, stop, TP1, TP2, R:R');
-    lines.push('• <b>Position size</b> — how much to buy, how many dollars at risk, for your account');
-    lines.push('• Daily briefing — watchlist with levels, setups awaiting their trigger, regime filters');
-    lines.push('• Live tracking of open positions and partial-exit alerts');
-    lines.push('• Weekly and monthly performance breakdown — <b>losses included</b>', '');
+    lines.push('• Every signal <b>the moment it fires</b> — entry, stop and exit time, with a chart');
+    lines.push('• <b>SHORT</b> signals on coins after an extreme pump (max 2 per day)');
+    lines.push('• Every result is posted here — <b>wins and losses</b>');
+    lines.push('• A weekly results card', '');
     lines.push('<b>What the free channel gets</b>');
-    lines.push(`• One signal a day, ${ENV.freeDelayMin} min delayed, with <b>no levels</b>`);
-    lines.push('• Daily analysis, the closing recap, performance tables', '');
-    lines.push('<b>Why the system is different</b>');
-    lines.push('It does not predict. It waits for a move to <b>exhaust</b> and measures it:');
-    lines.push('open interest, taker flow, CVD, liquidity sweeps, order-book depth,');
-    lines.push('liquidation cascades, volume profile. 400+ pairs, 24/7.');
-    lines.push('Most days it finds <b>zero or one</b> setup. That is the point —');
-    lines.push('a channel that fires ten signals a day has lowered its standards.', '');
+    lines.push('• Examples of closed winning trades — 24 hours after VIP');
+    lines.push('• News and education posts', '');
+    lines.push('<b>How it works</b>');
+    lines.push('It does not predict. It scans for coins up 50%+ in 24 hours that just pumped hard in the last 15 minutes,');
+    lines.push('then filters them by open interest (OI) and market conditions. Most days there are <b>zero or few</b> signals — on purpose.', '');
   }
 
   lines.push(L(lang, '<b>PRICING</b> — pay in crypto (USDT, BTC, ETH and 100+ more)',
