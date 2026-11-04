@@ -46,21 +46,21 @@ export function variantStats(rows, v) {
   };
 }
 const f2 = (v, d = 2) => (Number.isFinite(v) ? (+v).toFixed(d) : '—');
-export function scorecardText(rows) {
-  const lines = [`<b>V1K GÖLGE KARNE</b> · ${rows.length} sinyal (kanala hiçbir şey gönderilmedi)`, ''];
-  lines.push('<pre>' + 'var    n   ort% ortanca  kaz%  enkötü  düşüş  açık/atl' + '\n' + Object.keys(VARIANTS).map((v) => {
+export function scorecardText(rows, { title = 'V1K GÖLGE KARNE', variants = VARIANTS, legend = null, gateVariants = ['K1', 'K2', 'K4'] } = {}) {
+  const lines = [`<b>${title}</b> · ${rows.length} sinyal (kanala hiçbir şey gönderilmedi)`, ''];
+  lines.push('<pre>' + 'var    n   ort% ortanca  kaz%  enkötü  düşüş  açık/atl' + '\n' + Object.keys(variants).map((v) => {
     const s = variantStats(rows, v);
     return `${v.padEnd(4)} ${String(s.n).padStart(3)} ${f2(s.mean).padStart(6)} ${f2(s.median).padStart(8)} ${f2(s.win, 0).padStart(4)} ${f2(s.worst, 1).padStart(8)} ${f2(s.dd, 1).padStart(10)}   ${s.open}/${s.skipped}`;
   }).join('\n') + '</pre>');
-  lines.push('K0 taban · K1 filtre (son 15 dk OI artışı ≤ %' + FILTER_OI15 + ') · K2 K1+OI çıkışı · K3 K1+ilk kırmızı mumda giriş · K4 hepsi · K5 giriş+çıkış, filtresiz');
-  const gate = ['K1', 'K2', 'K4'].map((v) => { const s = variantStats(rows, v); return `${v}: ${s.n >= GATE_N && s.mean > 0 && s.median > 0 ? 'TUTTU' : `tutmadı (n=${s.n}/${GATE_N})`}`; });
+  lines.push(legend || 'K0 taban · K1 filtre (son 15 dk OI artışı ≤ %' + FILTER_OI15 + ') · K2 K1+OI çıkışı · K3 K1+ilk kırmızı mumda giriş · K4 hepsi · K5 giriş+çıkış, filtresiz');
+  const gate = gateVariants.map((v) => { const s = variantStats(rows, v); return `${v}: ${s.n >= GATE_N && s.mean > 0 && s.median > 0 ? 'TUTTU' : `tutmadı (n=${s.n}/${GATE_N})`}`; });
   lines.push('', `Yayına geçiş şartı (n ≥ ${GATE_N}, ortalama > 0, ortanca > 0): ${gate.join(' · ')}`, 'Yayın kararı sende; şart tutsa bile otomatik yayın yoktur.');
   return lines.join('\n');
 }
 
 /* ------------------------------------------------------------------ live recording */
 
-async function oiSeries(symbol, limit = 500) {
+export async function oiSeries(symbol, limit = 500) {
   const [oi, gl, tk] = await Promise.all([
     api('/futures/data/openInterestHist', { symbol, period: '5m', limit }),
     api('/futures/data/globalLongShortAccountRatio', { symbol, period: '5m', limit }).catch(() => []),
@@ -71,7 +71,7 @@ async function oiSeries(symbol, limit = 500) {
   return oi.map((x) => { const t = +x.timestamp; if (glm.has(t)) lastGl = glm.get(t); if (tkm.has(t)) lastTk = tkm.get(t); return { t, u: +x.sumOpenInterestValue, gl: lastGl, tk: lastTk }; });
 }
 
-async function snapshot(sym, m, b) {
+export async function snapshot(sym, m, b) {
   const [m1, k15, recs, prem, btc1h] = await Promise.all([
     klines(sym, '1m', 400, { endTime: b - 1 }), klines(sym, '15m', 270, { endTime: b - 1 }), oiSeries(sym, 60).catch(() => []),
     api('/fapi/v1/premiumIndex', { symbol: sym }).catch(() => null), klines('BTCUSDT', '1h', 175, { endTime: b - 1 }).catch(() => []),

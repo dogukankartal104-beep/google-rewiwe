@@ -7,6 +7,7 @@ import * as np from './payments.js';
 import { warmup, scanOnce, MARKET } from './scanner.js';
 import { resolveOpen, resolveShadows } from './tracker.js';
 import { shadowTick } from './shadow.js';
+import { shadow2Tick } from './shadow2.js';
 import { publishV1kWeekly } from './weekly.js';
 import {
   publishSignal, publishResult, publishPendingFree,
@@ -48,6 +49,8 @@ async function tick() {
   // 2b) candidate engines: forward paper trading, never published
   try { await shadowTick(); }
   catch (e) { warn('shadow:', e.message); }
+  try { await shadow2Tick(); }
+  catch (e) { warn('shadow v1p:', e.message); }
 
   // 3) gecikmeli free vitrin
   try { await publishPendingFree(); }

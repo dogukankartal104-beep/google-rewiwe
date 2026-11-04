@@ -108,3 +108,29 @@ test('FADE engine is recorded but not published; v1k is the VIP engine', async (
 test('education: free only, every second day by default', () => {
   assert.equal(ENV.eduEveryDays, 2);
 });
+
+import { rollingTrigger, rollingFires, pullbackEntry, P_VARIANTS } from '../src/shadow2.js';
+
+const M1 = 6e4;
+const bars = (n, f, t0 = 1e12) => Array.from({ length: n }, (_, i) => { const c = f(i); return { t: t0 + i * M1, o: c, h: c * 1.002, l: c * 0.998, c, v: 5, q: 1e4, tb: 2, tq: 5e3 }; });
+
+test('v1p rolling trigger: +4% in 15 minutes, +50% in 24h, BTC weak, volume; gaps give null', () => {
+  const k = bars(1500, (i) => (i < 1485 ? 100 + i * 0.03 : 100 + 1485 * 0.03 + (i - 1485) * 3.5));   // jumps in the last 15 minutes
+  const btc = bars(1500, (i) => 100 - i * 0.002);
+  const m = rollingTrigger(k, 1499, btc);
+  assert.ok(m && m.r15 >= 4 && m.chg24 >= 50 && m.btc24 <= -1 && m.vol24 >= 1e6);
+  assert.equal(rollingFires(m), true);
+  assert.equal(rollingFires(rollingTrigger(k, 1499, bars(1500, (i) => 100 + i * 0.01))), false, 'BTC not weak');
+  assert.equal(rollingFires(rollingTrigger(k, 1450, btc)), false, 'earlier minute: no pump yet');
+  const gap = k.map((x, i) => (i > 100 ? { ...x, t: x.t + M1 } : x));
+  assert.equal(rollingTrigger(gap, 1499, btc), null);
+  assert.equal(rollingTrigger(k.slice(0, 1000), 999, btc), null);
+});
+
+test('v1p pullback confirmation: first close p below the running high, pending while the window runs, none when it never happens', () => {
+  const k = [{ t: 0, o: 100, h: 110, l: 99, c: 108, v: 1 }, { t: 6e4, o: 108, h: 112, l: 107, c: 111, v: 1 }, { t: 12e4, o: 111, h: 111.5, l: 106, c: 107, v: 1 }, ...Array(40).fill({ t: 0, o: 107, h: 108, l: 106, c: 107, v: 1 })];
+  assert.equal(pullbackEntry(k, 0.03), 3, 'close 107 is 4.5% below the high of 112, entry on the next candle');
+  assert.equal(pullbackEntry(k, 0.06), -1, 'a 6% pullback never comes');
+  assert.equal(pullbackEntry(k.slice(0, 2), 0.03), 'pending', 'not enough candles yet');
+  assert.deepEqual(Object.keys(P_VARIANTS), ['P1', 'P2', 'P1F', 'P2F']);
+});
