@@ -10,7 +10,7 @@ import * as tg from './telegram.js';
 import * as M from './messages.js';
 import { profitChartPng, levelChartPng, CHART_COLORS } from './chart.js';
 import { notifyAdmins } from './vip.js';
-import { engineEntry, FILTER_OI15, VARIANTS } from '../bt/v1/engine.js';
+import { engineEntry, LIVE_FILTER_OI15 as FILTER_OI15, VARIANTS } from '../bt/v1/engine.js';
 import { mtfFeatures } from '../bt/v1/mtf.js';
 
 const M15 = 9e5, MIN = 6e4, HOUR = 36e5, DAY = 864e5;

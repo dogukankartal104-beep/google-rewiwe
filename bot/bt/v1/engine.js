@@ -2,6 +2,7 @@
 // Pure: candles in, outcome out. Protocol: docs/v1k-motor-protokol.md.
 import { simulateParts, earlyClose, checkEvents, firstTrigger, CELLS_EARLY } from './sim.js';
 
+export const LIVE_FILTER_OI15 = 3.88;     // live threshold since 2026-11-04 (owner decision; found post-hoc by an external analysis, see docs/v1k-oi388-ek.md)
 export const FILTER_OI15 = 6.01;          // % OI growth in the last 15 minutes; derived on the discovery period (v1k-arge EK-1)
 export const STOP_FROM_SIGNAL = 1.5;      // stop = signal price x 1.5 for every variant
 const MIN = 6e4, M15 = 9e5, DAY = 864e5;

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { v1kCheck, v1kTriggers, variantStats, scorecardText } from '../src/shadow.js';
-import { VARIANTS, FILTER_OI15 } from '../bt/v1/engine.js';
+import { VARIANTS, FILTER_OI15, LIVE_FILTER_OI15 } from '../bt/v1/engine.js';
 
 const M15 = 9e5;
 const series = (n, f, t0 = 1e12) => Array.from({ length: n }, (_, i) => { const c = f(i); return { t: t0 + i * M15, o: c, h: c * 1.01, l: c * 0.99, c, v: 10, q: 1e5, tb: 5, tq: 5e4 }; });
@@ -28,7 +28,7 @@ test('variants: the six cells and the filter threshold are as registered in the 
   assert.deepEqual(Object.keys(VARIANTS), ['K0', 'K1', 'K2', 'K3', 'K4', 'K5']);
   assert.equal(VARIANTS.K4.F && VARIANTS.K4.E1 && VARIANTS.K4.O1, true);
   assert.equal(VARIANTS.K5.F, false);
-  assert.equal(FILTER_OI15, 6.01);
+  assert.equal(FILTER_OI15, 6.01); assert.equal(LIVE_FILTER_OI15, 3.88);
 });
 
 const row = (nets, filtered = false) => ({ variants: Object.fromEntries(Object.keys(VARIANTS).map((v) => [v, filtered && VARIANTS[v].F ? { state: 'filtered' } : { state: 'closed', net: nets, te: Math.random() * 1e9 }])) });

@@ -6,7 +6,7 @@ import * as db from './db.js';
 import { api, klines } from './binance.js';
 import { MARKET } from './scanner.js';
 import { log, warn } from './util.js';
-import { engineEntry, FILTER_OI15 } from '../bt/v1/engine.js';
+import { engineEntry, LIVE_FILTER_OI15 as FILTER_OI15 } from '../bt/v1/engine.js';
 import { oiSeries, snapshot, scorecardText } from './shadow.js';
 import * as tg from './telegram.js';
 import * as M from './messages.js';
