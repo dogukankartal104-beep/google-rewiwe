@@ -90,6 +90,31 @@ export function newsCardSvg({ title, tag, source, when }) {
   return o.join('');
 }
 
+/* Weekly results: one bar per signal, green for wins and red for losses, with the value at the bar end. items: [{sym, net|null}] */
+export function weekResultsSvg({ title, label, items, foot = 'Every VIP signal of the week, wins and losses. Not financial advice.' }) {
+  const W = 1200, rows = Math.min(items.length, 14), rowH = rows > 10 ? 34 : 42, H = 190 + Math.max(rows, 1) * rowH + 90;
+  const vals = items.slice(0, rows).map((x) => x.net ?? 0);
+  const max = Math.max(5, ...vals.map(Math.abs)), x0 = 520, half = 300;     // zero line at x0, bars grow both ways
+  const o = [];
+  o.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${FONT}"><rect width="${W}" height="${H}" fill="${C.bg}"/>`);
+  o.push(`<text x="50" y="72" font-size="40" font-weight="bold" fill="${C.text}">${xml(title)}</text><text x="50" y="112" font-size="24" fill="${C.dim}">${xml(label)}</text>`);
+  o.push(`<line x1="${x0}" y1="150" x2="${x0}" y2="${150 + rows * rowH + 10}" stroke="${C.grid}" stroke-width="2"/>`);
+  if (!rows) o.push(`<text x="50" y="190" font-size="28" fill="${C.dim}">No signal passed the filters this week.</text>`);
+  items.slice(0, rows).forEach((it, i) => {
+    const y = 160 + i * rowH, v = it.net ?? 0, w = Math.max(3, Math.abs(v) / max * half), up = v >= 0;
+    o.push(`<text x="50" y="${y + rowH * 0.62}" font-size="${rowH > 36 ? 24 : 21}" font-weight="bold" fill="${C.text}">${xml(it.sym)}</text>`);
+    if (it.net == null) o.push(`<text x="${x0 + 14}" y="${y + rowH * 0.62}" font-size="22" fill="${C.dim}">open</text>`);
+    else {
+      o.push(`<rect x="${up ? x0 : x0 - w}" y="${y + 4}" width="${w}" height="${rowH - 10}" rx="4" fill="${up ? C.up : C.dn}"/>`);
+      o.push(`<text x="${up ? x0 + w + 12 : x0 - w - 12}" y="${y + rowH * 0.62}" font-size="21" font-weight="bold" fill="${up ? C.up : C.dn}" text-anchor="${up ? 'start' : 'end'}">${v > 0 ? '+' : ''}${v.toFixed(1)}%</text>`);
+    }
+  });
+  if (items.length > rows) o.push(`<text x="50" y="${160 + rows * rowH + 24}" font-size="20" fill="${C.dim}">+ ${items.length - rows} more in the text below</text>`);
+  o.push(`<text x="50" y="${H - 46}" font-size="26" font-weight="bold" fill="${C.cyan}">Crypto Pump Radar</text><text x="50" y="${H - 18}" font-size="16" fill="${C.dim}">${xml(foot)}</text></svg>`);
+  return o.join('');
+}
+export const weekResultsPng = (args) => safe(() => renderPng(weekResultsSvg(args)));
+
 let ResvgClass = null;
 export async function renderPng(svg) {
   if (!ResvgClass) ResvgClass = (await import('@resvg/resvg-js')).Resvg;

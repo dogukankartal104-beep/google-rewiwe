@@ -843,3 +843,52 @@ export function v1kResult(row) {
   lines.push(`<i>${RISK}</i>`);
   return { text: lines.join('\n') };
 }
+
+
+/* ============================================================
+   VIP WELCOME (DM right after the payment) and the weekly v1k cards
+   ============================================================ */
+export function vipWelcomeMsg(lang = 'en') {
+  return [
+    L(lang, '⭐ <b>Welcome to VIP. Your first steps</b>', '⭐ <b>VIP\'e hoş geldin. İlk adımların</b>'),
+    '',
+    L(lang, '<b>1. Turn notifications on</b> for the VIP channel. A signal is only useful the moment it arrives.', '<b>1. VIP kanalının bildirimlerini aç.</b> Sinyal geldiği anda işe yarar.'),
+    L(lang, '<b>2. What a signal looks like:</b> the coin, the direction, the entry, the stop, the exit time and a chart. Every VIP signal comes with all of them, the moment it fires.', '<b>2. Sinyal nasıl görünür:</b> coin, yön, giriş, stop, çıkış zamanı ve bir grafik. Her VIP sinyali bunların hepsiyle, ateşlendiği anda gelir.'),
+    L(lang, '<b>3. Your risk rules (please follow them):</b>', '<b>3. Risk kuralların (lütfen uygula):</b>'),
+    L(lang, '• 1x leverage only. A higher leverage can be liquidated before the stop triggers.', '• Yalnız 1x kaldıraç. Daha yükseği stop çalışmadan tasfiye olabilir.'),
+    L(lang, '• At most 5% of your account per signal. A stop-out then costs about 2.5% of the account.', '• Sinyal başına hesabın en çok %5\'i. Stop olursa hesabın yaklaşık %2.5\'i gider.'),
+    L(lang, '• Place the stop the moment you enter. Never move it further away and never add to a losing trade.', '• Stopu girer girmez koy. Asla uzaklaştırma, kaybeden işleme ekleme yapma.'),
+    L(lang, '• Signals come about once a day, some days none. Do not force a trade.', '• Sinyal günde yaklaşık bir tane gelir, bazı günler hiç gelmez. İşlem zorlama.'),
+    L(lang, '<b>4. Results:</b> every result is posted in the VIP channel, wins and losses, and a weekly card sums the week up.', '<b>4. Sonuçlar:</b> her sonuç VIP kanalında yayınlanır, kazanç da kayıp da, ve haftalık bir kart haftayı özetler.'),
+    L(lang, '<b>5. Handy commands:</b> /status shows your membership, /how explains the system, /language switches this chat between English and Turkish.', '<b>5. Faydalı komutlar:</b> /status üyeliğini gösterir, /how sistemi anlatır, /language bu sohbeti İngilizce ve Türkçe arasında değiştirir.'),
+    '',
+    `<i>${L(lang, RISK, RISK_TR)}</i>`,
+  ].join('\n');
+}
+
+const sgn = (v, d = 1) => `${v > 0 ? '+' : ''}${fmt(v, d)}%`;
+export function v1kWeekVip(stats, label) {
+  const lines = [`📊 <b>WEEKLY RESULTS · VIP signals</b>`, `<i>${esc(label)}</i>`, ''];
+  if (!stats.n) { lines.push('No signal passed the filters this week. A quiet week is not a bad week: the system waits for its setup.'); }
+  else {
+    lines.push(`Signals: <b>${stats.n}</b> · won <b>${stats.won}</b> · lost <b>${stats.lost}</b>${stats.open ? ` · still open <b>${stats.open}</b>` : ''}`);
+    if (stats.closed) {
+      lines.push(`Average per closed trade: <b>${sgn(stats.mean)}</b> of the position · best <b>${esc(stats.best.sym)} ${sgn(stats.best.net)}</b> · worst <b>${esc(stats.worst.sym)} ${sgn(stats.worst.net)}</b>`);
+      lines.push(`Following every signal with 5% of the account at 1x: about <b>${sgn(stats.sum * 0.05, 2)}</b> of the account this week.`);
+    }
+    lines.push('');
+    stats.items.forEach((x) => lines.push(`${x.net == null ? '⏳' : x.net > 0 ? '✅' : '🔴'} ${esc(x.sym)}  ${x.net == null ? 'open' : sgn(x.net)}`));
+  }
+  lines.push('', 'Every VIP signal of the week is in this card, wins and losses.', `<i>${RISK}</i>`);
+  return lines.join('\n');
+}
+export function v1kWeekFree(symbols) {
+  const lines = ['👀 <b>THIS WEEK IN VIP</b>', ''];
+  if (!symbols.length) lines.push('A quiet week: no setup passed our filters, so VIP members got no signal. That is the system doing its job.');
+  else {
+    lines.push(`VIP members got live signals on: <b>${symbols.map((s) => esc(sym(s))).join(', ')}</b>.`);
+    lines.push('Each one came with the entry, the stop and the exit time, the moment it fired.');
+  }
+  lines.push('', 'This channel is our shop window. The live signals and the full weekly results are in VIP ⤵️', '', `<i>${RISK}</i>`);
+  return { text: lines.join('\n'), reply_markup: vipBtn('week') };
+}

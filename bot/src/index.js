@@ -7,6 +7,7 @@ import * as np from './payments.js';
 import { warmup, scanOnce, MARKET } from './scanner.js';
 import { resolveOpen, resolveShadows } from './tracker.js';
 import { shadowTick } from './shadow.js';
+import { publishV1kWeekly } from './weekly.js';
 import {
   publishSignal, publishResult, publishPendingFree,
   publishDaily, publishDailyRecap, publishWeekly, publishMonthly,
@@ -81,7 +82,7 @@ async function schedule() {
     if (h === 23 && mi < 5) await publishDailyRecap();
 
     // haftalık tablo — günlük analizden 10 dk sonra
-    if (dow === ENV.weeklyDay && h === ENV.dailyHour && mi >= 10 && mi < 15) await publishWeekly();
+    if (dow === ENV.weeklyDay && h === ENV.dailyHour && mi >= 10 && mi < 15) { await publishWeekly(); await publishV1kWeekly(); }
 
     // aylık tablo — ayın 1'i, günlük analizden 20 dk sonra
     if (dom === ENV.monthlyDay && h === ENV.dailyHour && mi >= 20 && mi < 25) await publishMonthly();

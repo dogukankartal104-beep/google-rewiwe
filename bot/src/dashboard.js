@@ -134,6 +134,14 @@ export async function aggregate({ force = false } = {}) {
       ortalamaUyelik: vipActive.length
         ? +(revenue30 / Math.max(1, credited.length)).toFixed(2) : 0,
     },
+    funnel: (() => {
+      const m = new Map();
+      const row = (k) => { const key = k || 'direct'; if (!m.has(key)) m.set(key, { src: key, tikla: 0, acilis: 0, fatura: 0, odeme: 0, gelir: 0 }); return m.get(key); };
+      buttonClicks.forEach((c) => { row(c.source).tikla++; });
+      botOpens.forEach((c) => { row(c.source).acilis++; });
+      pays30.forEach((p) => { const r = row(p.src); r.fatura++; if (p.credited) { r.odeme++; r.gelir += p.amount || 0; } });
+      return [...m.values()].sort((a, b) => b.odeme - a.odeme || b.fatura - a.fatura || b.tikla - a.tikla);
+    })(),
     kanal: {
       freeUye: chanNow.free, freeOnceki: chanPrev.free,
       vipUye: chanNow.vip, vipOnceki: chanPrev.vip,
@@ -294,6 +302,8 @@ tr:hover td{background:#111a23}
 
 <div class="card"><div class="hd">engine lab · yayınlanan vs gölge vs backtest</div><div id="tlab"></div></div>
 
+<div class="card"><div class="hd">dönüşüm · hangi gönderi VIP'e getiriyor (tıklama 7 gün, fatura ve ödeme 30 gün)</div><div id="tfunnel"></div></div>
+
 <div class="g2">
   <div class="card"><div class="hd">son ödemeler</div>
     <div style="max-height:280px;overflow:auto"><table id="tpay"></table></div></div>
@@ -436,6 +446,12 @@ function render(d){
   + '<div class="row2"><span>genişlik</span><span class="lbl">'+esc(g.note||'')+'</span><span>'
       +'<span class="up">'+(g.up??'—')+'↑</span> / <span class="dn">'+(g.dn??'—')+'↓</span></span></div>'
   + grRows + ynRows;
+
+  // --- funnel ---
+  $('#tfunnel').innerHTML = (d.funnel && d.funnel.length)
+    ? '<div class="row2"><span class="lbl">kaynak</span><span class="lbl">tıklama · bot açılışı · fatura</span><span class="lbl">ödeme · gelir</span></div>'
+      + d.funnel.map(x=>'<div class="row2"><span>'+esc(x.src)+'</span><span class="lbl">'+x.tikla+' · '+x.acilis+' · '+x.fatura+'</span><span class="'+(x.odeme?'up':'nt')+'">'+x.odeme+' · $'+f(x.gelir,0)+'</span></div>').join('')
+    : '<div class="lbl">henüz tıklama yok</div>';
 
   // --- lab ---
   const L = d.lab || {};

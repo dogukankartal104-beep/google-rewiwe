@@ -138,6 +138,9 @@ const SCHEMA = [
     created_at timestamptz not null default now()
   )`,
   `alter table bot_users add column if not exists lang text not null default 'en'`,
+  // conversion tracking: which post sent the person to the VIP menu last, and which source each invoice came from
+  `alter table bot_users add column if not exists src text`,
+  `alter table payments add column if not exists src text`,
 
   `create table if not exists channel_stats (
     day date not null, channel text not null, members int,
@@ -424,6 +427,10 @@ export const statsSnapshot = (day, channel, members) =>
 export const statsHistory = (days = 30) =>
   q(`select to_char(day,'YYYY-MM-DD') as day, channel, members
      from channel_stats order by day desc limit $1`, [days * 2]);
+
+export const userSetSrc = (id, src) =>
+  q('update bot_users set src=$2 where telegram_id=$1', [id, String(src || 'direct').slice(0, 40)]).catch(() => null);
+export const userGetSrc = async (id) => (await one('select src from bot_users where telegram_id=$1', [id]).catch(() => null))?.src || null;
 
 export const clickAdd = (row) =>
   q(`insert into click_events (kind,source,signal_key,ua) values ($1,$2,$3,$4)`,

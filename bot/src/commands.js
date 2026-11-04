@@ -98,6 +98,7 @@ async function handle(u, ctx) {
       const payload = String(args[0] || '');
       if (/^vip(_|$)/.test(payload)) {
         db.clickAdd({ kind: 'open', source: payload.slice(4) || 'direct', signal_key: null, ua: null });
+        db.userSetSrc(from.id, payload.slice(4) || 'direct');
         return sendVipMenu(from, lang);
       }
       return tg.send(from.id, M.startMsg(from.first_name, lang),
@@ -220,6 +221,7 @@ async function onCallback(cq) {
         amount: price,
         currency: ENV.npCurrency,
         status: 'waiting',
+        src: await db.userGetSrc(from.id),
         raw: inv.raw || null,
       });
       await tg.send(from.id, M.invoiceMsg({ ...plan, price }, inv.url,

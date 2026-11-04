@@ -83,6 +83,7 @@ export async function grant(tgId, plan, { amount = 0, orderId = null } = {}) {
   try {
     const lang = await db.getUserLang(tgId);
     await tg.send(tgId, M.grantMsg(p.name, expires, link, lang));
+    if (!existing) await tg.send(tgId, M.vipWelcomeMsg(lang));        // first-time members get the first steps and the risk rules
   } catch (e) {
     warn(`grant DM could not be sent (${tgId}): ${e.message}`);
   }
