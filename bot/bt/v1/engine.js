@@ -5,6 +5,11 @@ import { simulateParts, earlyClose, checkEvents, firstTrigger, CELLS_EARLY } fro
 export const FILTER_OI15 = 6.01;          // % OI growth in the last 15 minutes; derived on the discovery period (v1k-arge EK-1)
 export const STOP_FROM_SIGNAL = 1.5;      // stop = signal price x 1.5 for every variant
 const MIN = 6e4, M15 = 9e5, DAY = 864e5;
+// The six variants recorded side by side (docs/v1k-motor-protokol.md section 2): F = oi15 filter, E1 = first red 15m candle entry, O1 = OI exit.
+export const VARIANTS = {
+  K0: { F: false, E1: false, O1: false }, K1: { F: true, E1: false, O1: false }, K2: { F: true, E1: false, O1: true },
+  K3: { F: true, E1: true, O1: false }, K4: { F: true, E1: true, O1: true }, K5: { F: false, E1: true, O1: true },
+};
 
 /* k: contiguous 1m candles, i0: the candle that opens at the signal time (the first 15m close after the alarm).
    Returns {ok:true, net, te, tEntry, exit, entry} | {skip:true, why} | {pending:true, why} | {ok:false, why} (still open or data problem). */

@@ -6,6 +6,7 @@ import * as vip from './vip.js';
 import * as np from './payments.js';
 import { warmup, scanOnce, MARKET } from './scanner.js';
 import { resolveOpen, resolveShadows } from './tracker.js';
+import { shadowTick } from './shadow.js';
 import {
   publishSignal, publishResult, publishPendingFree,
   publishDaily, publishDailyRecap, publishWeekly, publishMonthly,
@@ -42,6 +43,10 @@ async function tick() {
   // 2) tarama
   try { await runScan(); }
   catch (e) { err('tarama:', e.message); }
+
+  // 2b) candidate engines: forward paper trading, never published
+  try { await shadowTick(); }
+  catch (e) { warn('shadow:', e.message); }
 
   // 3) gecikmeli free vitrin
   try { await publishPendingFree(); }

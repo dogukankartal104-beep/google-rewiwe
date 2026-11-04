@@ -36,8 +36,10 @@ test('cookie is HttpOnly, Secure and SameSite=Strict', () => {
   assert.match(c, /HttpOnly/); assert.match(c, /Secure/); assert.match(c, /SameSite=Strict/);
 });
 
+import net from 'node:net';
+const freePort = () => new Promise((res, rej) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)); }); s.on('error', rej); });
 const withDash = async (fn) => {
-  const port = 40100 + Math.floor(Math.random() * 400);
+  const port = await freePort();
   const saved = { port: ENV.port, dashKey: ENV.dashKey };
   ENV.port = port; ENV.dashKey = KEY;
   const srv = startServer();

@@ -6,6 +6,8 @@ import { ENV, CFG } from './config.js';
 import * as db from './db.js';
 import * as tg from './telegram.js';
 import { stats, bucketize } from './tracker.js';
+import { shadowRows, variantStats } from './shadow.js';
+import { VARIANTS } from '../bt/v1/engine.js';
 import { MARKET } from './scanner.js';
 import { dayKey } from './publisher.js';
 import { trDayStart, trDate, fmt, warn } from './util.js';
@@ -31,7 +33,7 @@ export async function aggregate({ force = false } = {}) {
 
   const [
     vipActive, openSig, closed30, closedToday, pays30, joinedToday,
-    clicks7, chStats, recentSig, recentPays, users, eduFree, eduVip, shadow30,
+    clicks7, chStats, recentSig, recentPays, users, eduFree, eduVip, shadow30, v1kRows,
   ] = await Promise.all([
     safe(db.vipActive(), []),
     safe(db.openSignals(), []),
@@ -47,6 +49,7 @@ export async function aggregate({ force = false } = {}) {
     safe(db.eduLast('free'), null),
     safe(db.eduLast('vip'), null),
     safe(db.shadowSince(iso(now - 30 * 864e5)), []),
+    safe(shadowRows(), []),
   ]);
 
   const st30 = stats(closed30);
@@ -166,6 +169,7 @@ export async function aggregate({ force = false } = {}) {
       const bt = shadow30.filter(isBt), sh = shadow30.filter((x) => !isBt(x));
       return {
         yayinlanan: sum(closed30), golge: sum(sh), backtest: sum(bt),
+        v1k: { n: v1kRows.length, v: Object.keys(VARIANTS).map((v) => { const s = variantStats(v1kRows, v); return { v, n: s.n, ort: Number.isFinite(s.mean) ? +s.mean.toFixed(2) : null, ortanca: Number.isFinite(s.median) ? +s.median.toFixed(2) : null, kazanma: Number.isFinite(s.win) ? Math.round(s.win) : null, dusus: +s.dd.toFixed(1), acik: s.open }; }) },
         btSinif: grades(bt), golgeSinif: grades(sh),
       };
     })(),
@@ -438,7 +442,8 @@ function render(d){
   const labRow = (name, x) => '<div class="row2"><span>'+name+'</span><span class="lbl">'+(x&&x.n?x.n+' işlem · isabet %'+x.isabet:'veri yok')+'</span><span class="'+cls(x&&x.ort)+'">'+(x&&x.n?sgn(x.ort)+'R ort':'—')+'</span></div>';
   const gl = (name, o) => Object.keys(o||{}).sort().map(g=>labRow(name+' '+esc(g), o[g])).join('');
   $('#tlab').innerHTML = labRow('yayınlanan (gerçek)', L.yayinlanan) + labRow('gölge (elenenler)', L.golge)
-    + labRow('backtest (geçmiş tekrar)', L.backtest) + gl('gölge sınıf', L.golgeSinif) + gl('backtest sınıf', L.btSinif);
+    + labRow('backtest (geçmiş tekrar)', L.backtest) + gl('gölge sınıf', L.golgeSinif) + gl('backtest sınıf', L.btSinif)
+    + (L.v1k ? '<div class="row2"><span><b>v1k gölge karne</b></span><span class="lbl">'+L.v1k.n+' sinyal · kanala gitmez · şart: n≥30, ort>0, ortanca>0</span><span></span></div>' + L.v1k.v.map(x=>'<div class="row2"><span>'+x.v+'</span><span class="lbl">'+(x.n?x.n+' işlem · ortanca '+x.ortanca+'% · kazanma %'+x.kazanma+' · düşüş '+x.dusus+' · açık '+x.acik:'açık '+x.acik+' · henüz kapanan yok')+'</span><span class="'+cls(x.ort)+'">'+(x.n?sgn(x.ort)+'%':'—')+'</span></div>').join('') : '');
 
   // --- notlar ---
   const n = [];

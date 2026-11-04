@@ -68,6 +68,20 @@ const SCHEMA = [
   `create table if not exists shadow_signals (like signals including defaults)`,
   `create unique index if not exists shadow_key_idx on shadow_signals (key)`,
   `create index if not exists shadow_status_idx on shadow_signals (status)`,
+  // Shadow engines (v1k, G1-D): forward paper trading. Nothing here is ever published.
+  `create table if not exists shadow_engine (
+    id bigserial primary key,
+    key text unique not null,
+    engine text not null,
+    symbol text not null,
+    sig_at timestamptz not null,
+    features jsonb not null default '{}',
+    variants jsonb not null default '{}',
+    status text not null default 'open',
+    closed_at timestamptz,
+    created_at timestamptz not null default now()
+  )`,
+  `create index if not exists shadow_engine_idx on shadow_engine (engine, status, sig_at desc)`,
   `create index if not exists signals_status_idx on signals (status)`,
   `create index if not exists signals_created_idx on signals (created_at desc)`,
   `create index if not exists signals_symdir_idx on signals (symbol, dir, created_at desc)`,
