@@ -438,9 +438,6 @@ export function vipMsg(plans, lang = 'en') {
     lines.push('<b>Ücretsiz kanalda ne var?</b>');
     lines.push('• Kapanmış, kazanan işlemlerden örnekler — VIP\'ten 24 saat sonra');
     lines.push('• Haber akışı ve eğitim içerikleri', '');
-    lines.push('<b>Sistem nasıl çalışır?</b>');
-    lines.push('Tahmin etmez. 24 saatte +%50 ve üstü yükselmiş, son 15 dakikada sert pump yapmış coinleri tarar;');
-    lines.push('açık pozisyon verisi (OI) ve piyasa filtreleriyle eler. Çoğu gün <b>sinyal olmaz veya az olur</b> — bu bilinçli.', '');
   } else {
     lines.push('⭐ <b>VIP MEMBERSHIP</b>', '');
     lines.push('<b>What VIP gets</b>');
@@ -451,9 +448,6 @@ export function vipMsg(plans, lang = 'en') {
     lines.push('<b>What the free channel gets</b>');
     lines.push('• Examples of closed winning trades — 24 hours after VIP');
     lines.push('• News and education posts', '');
-    lines.push('<b>How it works</b>');
-    lines.push('It does not predict. It scans for coins up 50%+ in 24 hours that just pumped hard in the last 15 minutes,');
-    lines.push('then filters them by open interest (OI) and market conditions. Most days there are <b>zero or few</b> signals — on purpose.', '');
   }
 
   lines.push(L(lang, '<b>PRICING</b> — pay in crypto (USDT, BTC, ETH and 100+ more)',
