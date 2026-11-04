@@ -52,7 +52,7 @@ const frozen = (k, i) => {
 };
 
 /* Scan one coin over [fromMs, toMs). Returns compact signals + placebo trades + coverage numbers. */
-export async function scanCoin(sym, fromMs, toMs, p = DEFAULTS) {
+export async function scanCoin(sym, fromMs, toMs, p = DEFAULTS, btc = null) {
   const cov = { sym, bars: 0, missingMonths: [], evals: 0, signals: 0, noOi: 0, errors: 0, firstErr: null, frozen: 0 };
   const warm = 8 * 864e5, tail = 3 * 864e5;
   const { k, missing } = await loadKlines(sym, '15m', fromMs - warm, toMs + tail);
@@ -84,7 +84,21 @@ export async function scanCoin(sym, fromMs, toMs, p = DEFAULTS) {
     if (riskPct < p.minStopPct) continue;
     const r = simulate(k, i, dir, sg.en, sg.st, sg.t1, p, funding);
     cov.signals++;
-    signals.push({ s: sym, dir, tS, riskPct, grade: sg.grade, type: sg.type, mode: sg.mode, exN: sg.exN, leg: sg.leg, oiChg: sg.oiChg, ses: sg.ses, ...r });
+    // Entry-time features (everything known when the candle closed; nothing from the future)
+    let qv = 0; for (let j = i - 95; j <= i; j++) qv += k[j].q;
+    let v20 = 0; for (let j = i - 20; j < i; j++) v20 += k[j].v;
+    let fundNow = null; for (const e of funding) { if (e.t <= tS) fundNow = e.r * 100; else break; }
+    const sgn = dir === 'S' ? 1 : -1;
+    const bi = btc?.idx.get(k[i].t);
+    const feat = {
+      chg24: chg, qv24: Math.log10(Math.max(qv, 1)), atrPct: A[i] / k[i].c * 100,
+      hr: new Date(tS).getUTCHours(), dow: new Date(tS).getUTCDay(),
+      fundNow, ret4: sgn * (k[i].c / k[i - 4].c - 1) * 100, volX: k[i].v / ((v20 / 20) || 1),
+      limDist: Math.abs(sg.en - k[i].c) / k[i].c * 100, ratio: sg.ratio, trN: sg.trN, sweep: sg.sweep ? 1 : 0, rrPlan: sg.rr,
+      btc24: bi >= 96 ? (btc.k[bi].c / btc.k[bi - 96].c - 1) * 100 : null,
+      btc1h: bi >= 4 ? (btc.k[bi].c / btc.k[bi - 4].c - 1) * 100 : null,
+    };
+    signals.push({ s: sym, dir, tS, riskPct, grade: sg.grade, type: sg.type, mode: sg.mode, exN: sg.exN, leg: sg.leg, oiChg: sg.oiChg, ses: sg.ses, ...feat, ...r });
   }
 
   // Placebo: the same trade (side, stop distance, limit mechanics) at other times on the same coin.

@@ -118,3 +118,30 @@ test('equity test: positive trades compound, max 2 open enforced', () => {
 test('HUD config is the original one, limit style', () => {
   assert.equal(CFG.stopMode, 0); assert.equal(CFG.minPumpPct, 15); assert.equal(CFG.rrTarget, 1); assert.equal(CFG.maxStopPct, 6);
 });
+
+import { spearman, ranks, learn, scoreOf, select, dedupePerCoin } from '../bt/lab.js';
+
+test('spearman: perfect, inverse and unrelated', () => {
+  const x = Array.from({ length: 50 }, (_, i) => i);
+  assert.ok(spearman(x, x) > 0.999);
+  assert.ok(spearman(x, x.map((v) => -v)) < -0.999);
+  assert.ok(Math.abs(spearman(x, x.map((v) => (v * 37) % 11))) < 0.4);
+  assert.deepEqual(ranks([5, 5, 1]), [2.5, 2.5, 1]);
+});
+
+test('lab: a planted feature is found, a noise feature is not, and selection obeys 2 per day', () => {
+  const r = rng2(3); const sigs = [];
+  for (let n = 0; n < 1200; n++) {
+    const volX = r() * 5, noise = r();
+    sigs.push({ s: 'C' + n, tS: Date.UTC(2025, n % 9, 1 + (n % 27), 3), tEnd: Date.UTC(2025, n % 9, 1 + (n % 27), 9), filled: true,
+      volX, atrPct: noise, net: (volX - 2.5) + (r() - 0.5) * 2 });
+  }
+  const { chosen } = learn(sigs, 2);
+  assert.equal(chosen[0].f, 'volX');
+  assert.ok(!chosen.slice(0, 1).some((c) => c.f === 'atrPct'));
+  const sel = select(sigs, chosen, 0.5, { perDay: 2 });
+  const perDay = new Map(); sel.forEach((x) => perDay.set(Math.floor(x.tS / 864e5), (perDay.get(Math.floor(x.tS / 864e5)) || 0) + 1));
+  assert.ok([...perDay.values()].every((c) => c <= 2));
+  assert.ok(sel.reduce((a, x) => a + x.net, 0) / sel.length > sigs.reduce((a, x) => a + x.net, 0) / sigs.length);
+});
+function rng2(seed) { let a = seed; return () => { a = (a * 1664525 + 1013904223) >>> 0; return a / 4294967296; }; }

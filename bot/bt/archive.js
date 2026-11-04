@@ -135,7 +135,11 @@ export async function loadKlines(sym, tf, fromMs, toMs) {
     const ym = m.toISOString().slice(0, 7);
     const txt = await csvText(klinesMonthly(sym, tf, ym));
     if (txt) { rows.push(...parseKlines(txt)); continue; }
-    // no monthly file: try each day (current month, or a month not published yet)
+    // No monthly file. Daily files only exist for months that are not published as a monthly yet
+    // (the current month and, for a few days, the previous one). An old month without a file means the
+    // contract did not exist or was already delisted, so asking for 30 daily files would be wasted work.
+    const monthEnd = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1)).getTime();
+    if (monthEnd < Date.now() - 12 * 864e5) continue;
     const mEnd = Math.min(toMs, new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1)).getTime());
     let got = 0;
     for (let d = m.getTime(); d < mEnd && d < Date.now() - 864e5; d += 864e5) {

@@ -23,6 +23,9 @@ let syms = arg('symbols') ? arg('symbols').split(',') : await listSymbols();
 if (arg('limit')) syms = syms.slice(0, Number(arg('limit')));
 console.log(`universe ${syms.length} symbols · ${new Date(from).toISOString().slice(0, 10)} → ${new Date(to).toISOString().slice(0, 10)} · out ${out}`);
 
+import { loadKlines } from './archive.js';
+const btcLoad = await loadKlines('BTCUSDT', '15m', from - 8 * 864e5, to + 3 * 864e5);
+const btc = { k: btcLoad.k, idx: new Map(btcLoad.k.map((x, i) => [x.t, i])) };
 let done = 0; const t0 = Date.now();
 const queue = [...syms];
 await Promise.all(Array.from({ length: par }, async () => {
@@ -31,7 +34,7 @@ await Promise.all(Array.from({ length: par }, async () => {
     const f = path.join(out, 'coins', sym + '.json');
     if (!fs.existsSync(f)) {
       try {
-        const r = await scanCoin(sym, from, to, p);
+        const r = await scanCoin(sym, from, to, p, btc);
         fs.writeFileSync(f, JSON.stringify(r));
       } catch (e) {
         fs.writeFileSync(f, JSON.stringify({ signals: [], placeboA: [], placeboB: [], cov: { sym, fatal: e.message } }));
