@@ -98,9 +98,9 @@ export async function renderPng(svg) {
 }
 const safe = async (fn) => { try { return await fn(); } catch (e) { warn('image skipped:', e.message); return null; } };
 
-async function candlesFor(symbol, tf = '15m', limit = 80) {
+async function candlesFor(symbol, tf = '15m', limit = 80, endTime = null) {
   const { klines } = await import('./binance.js');
-  return klines(symbol, tf, limit);
+  return klines(symbol, tf, limit, endTime ? { endTime } : {});
 }
 const dirOf = (d) => (d === 'L' ? 'L' : 'S');
 
@@ -117,12 +117,12 @@ export const signalChartPng = (sig) => safe(async () => {
 });
 
 /* Free showcase: a position that is in profit. now = current price, profitText e.g. "+3.4%". */
-export const profitChartPng = ({ symbol, tf = '15m', dir = 'S', entry, now, stop = null, targets = [], profitText, small = 'IN PROFIT' }) => safe(async () => {
-  const candles = await candlesFor(symbol, tf);
-  const lines = [{ price: entry, label: 'ENTRY', color: C.blue }, { price: now, label: 'NOW', color: C.up, dash: false }];
+export const profitChartPng = ({ symbol, tf = '15m', dir = 'S', entry, now, nowLabel = 'NOW', stop = null, targets = [], profitText, small = 'IN PROFIT', endTime = null, foot = 'Selected position shown while in profit. Not financial advice.' }) => safe(async () => {
+  const candles = await candlesFor(symbol, tf, 80, endTime);
+  const lines = [{ price: entry, label: 'ENTRY', color: C.blue }, { price: now, label: nowLabel, color: C.up, dash: false }];
   if (stop) lines.push({ price: stop, label: 'STOP', color: C.dn });
   targets.forEach((t, i) => lines.push({ price: t, label: `TP${i + 1}`, color: C.gold }));
-  return renderPng(candleChartSvg({ symbol, tf, candles, lines, tag: dir === 'L' ? 'LONG' : 'SHORT', badge: { big: profitText, small, color: C.up }, foot: 'Selected position shown while in profit. Not financial advice.' }));
+  return renderPng(candleChartSvg({ symbol, tf, candles, lines, tag: dir === 'L' ? 'LONG' : 'SHORT', badge: { big: profitText, small, color: C.up }, foot }));
 });
 
 /* Generic level chart (used for the v1k VIP signal): lines = [{price,label,color}], badge = {big, small, color}. */

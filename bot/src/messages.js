@@ -810,25 +810,25 @@ export function v1kSignal(row, key = null) {
   lines.push(`Why: <b>${pct(f.chg24)}</b> in 24h, <b>${pct(f.r15)}</b> in the last 15m, BTC weak (${pct(f.btc24)} / 24h), new open interest is drying up (${f.oi15 == null ? 'n/a' : pct(f.oi15)} in 15m).`);
   lines.push('');
   lines.push('<b>Size: 1x leverage only, at most 5% of your account.</b> A stop-out costs about 2.5% of the account. A stop at +50% means 2x or more can be liquidated before it triggers.');
-  lines.push('Every result, wins and losses, is posted here. No guarantees: any trade can hit its stop.');
+  lines.push('Every VIP signal comes with entry, stop and exit time, the moment it fires. Every result is posted here, wins and losses. No guarantees: any trade can hit its stop.');
   lines.push('');
   lines.push(`<i>${RISK}</i>`);
   return lines.join('\n');
 }
-const SHOWCASE_NOTE = 'Showcase: we show selected positions that are in profit when posted. Not every signal is shown. The final result of every showcased position is posted here, wins and losses.';
-export function v1kShowcase(row, profitPct) {
-  const f = row.features || {};
+const WINNER_NOTE = 'This channel is our shop window: we show selected winning trades, not every signal. Not every trade wins; the full record, wins and losses, is posted to VIP.';
+export function v1kWinner(row) {
+  const v = row.variants.K1, f = row.features || {};
   const D = f.px >= 100 ? 2 : f.px >= 1 ? 4 : f.px >= 0.01 ? 5 : 7;
   const lines = [];
-  lines.push('📈 <b>POSITION IN PROFIT</b> · extreme pump fade');
+  lines.push('✅ <b>WINNER</b> · extreme pump fade');
   lines.push(`🔻 <b>${sym(row.symbol)}</b> · SHORT`);
   lines.push('');
-  lines.push(`The coin had already pumped hard, BTC was weak and new open interest was drying up when the system took the short around <b>${fmt(f.px, D)}</b>.`);
-  lines.push(`It is currently <b>+${fmt(profitPct, 1)}%</b> in profit and still open. The result will be posted when it closes, whatever it is.`);
+  lines.push(`Entry around <b>${fmt(f.px, D)}</b>, closed after 24 hours: <b>+${fmt(v.net, 1)}%</b> of the position (after fees and funding).`);
+  lines.push('VIP members got this signal the moment it fired, with entry, stop and exit time.');
   lines.push('');
-  lines.push('This channel is our shop window. VIP is where the full plans and the live signals are. Come join us ⤵️');
+  lines.push('Come see the next one live ⤵️');
   lines.push('');
-  lines.push(`<i>${SHOWCASE_NOTE}</i>`);
+  lines.push(`<i>${WINNER_NOTE}</i>`);
   lines.push(`<i>${RISK}</i>`);
   return { text: lines.join('\n'), reply_markup: vipBtn('v1k', row.key || null) };
 }
@@ -839,7 +839,7 @@ export function v1kResult(row) {
   lines.push(`${win ? '✅' : '🔴'} <b>RESULT · ${sym(row.symbol)}</b> · SHORT`);
   lines.push(`${v.exit === 'stop' ? 'Stopped out' : 'Closed after 24 hours'}: <b>${v.net > 0 ? '+' : ''}${fmt(v.net, 1)}%</b> of the position (after fees and funding).`);
   lines.push('');
-  lines.push(`<i>${SHOWCASE_NOTE}</i>`);
+  lines.push('Every result is posted here, wins and losses.');
   lines.push(`<i>${RISK}</i>`);
   return { text: lines.join('\n') };
 }

@@ -100,11 +100,10 @@ export const ENV = {
 
   // --- haber motoru ---
   newsOn: bool('NEWS_ON', true),
-  v1kPublish: bool('V1K_PUBLISH', true),   // v1k showcase in the FREE channel (positions already in profit); /v1k off is the kill switch
+  v1kPublish: bool('V1K_PUBLISH', true),   // v1k: VIP signals + free winners; /v1k off is the kill switch
   v1kVip: bool('V1K_VIP', false),          // instant v1k signals to VIP (the VIP engine)
   v1kVipPerDay: Number(str('V1K_VIP_PER_DAY', '2')),
   fadePublish: bool('FADE_PUBLISH', false), // the older FADE engine: false = it still records and tracks signals, but publishes nothing (no signals, showcases or performance tables)
-  v1kFreeMinProfit: Number(str('V1K_FREE_MIN_PROFIT', '3')),   // % of the position in profit before it is shown
   shadowOn: bool('SHADOW_ENGINES', true),   // forward paper trading of the candidate engines (never publishes)
   newsMinScore: Number(str('NEWS_MIN_SCORE', '70')),  // bu puanın üstü "flaş haber"
   newsCheckMin: Number(str('NEWS_CHECK_MIN', '20')),  // kaç dakikada bir bakılsın
