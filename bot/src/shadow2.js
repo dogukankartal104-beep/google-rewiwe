@@ -12,6 +12,7 @@ import * as tg from './telegram.js';
 import * as M from './messages.js';
 import { levelChartPng, CHART_COLORS } from './chart.js';
 import { notifyAdmins } from './vip.js';
+const NOPUB_LOGGED = new Set();   // log each "not published" reason once per signal, not on every scan
 
 const MIN = 6e4, HOUR = 36e5, DAY = 864e5;
 export const ENGINE = 'v1p';
@@ -137,7 +138,7 @@ async function maybePublish(row, k, entryIdx, tSig) {
     db.q("select count(*)::int as n from shadow_engine where engine=$1 and (features->'pub'->>'vip_at')::bigint >= $2", [ENGINE, day0.getTime()]),
   ]);
   const g = v1pGuard({ enabled: !(await db.getState('v1k:off', false)), paused: await db.getState('v1p:paused', false), v1kOpen: open1.length > 0, publishedToday: today[0]?.n || 0, cap: ENV.v1pVipPerDay, entryAgeMs: Date.now() - k[entryIdx].t });
-  if (!g.ok) { log(`v1p not published (${g.why}): ${row.symbol}`); return; }
+  if (!g.ok) { const lk = `${row.key || row.id}:${g.why}`; if (!NOPUB_LOGGED.has(lk)) { NOPUB_LOGGED.add(lk); log(`v1p not published (${g.why}): ${row.symbol}`); } return; }
   const entry = k[entryIdx].o, stop = row.features.px * 1.5;
   const png = await levelChartPng({ symbol: row.symbol, tag: 'SHORT SIGNAL', lines: [{ price: entry, label: 'ENTRY', color: CHART_COLORS.blue }, { price: stop, label: 'STOP', color: CHART_COLORS.dn }], badge: { big: 'SHORT', small: 'pullback entry · 1x only · max 5%', color: CHART_COLORS.dn }, foot: 'Not financial advice. Leveraged trading can lose your entire capital.' });
   const msg = await tg.sendCard(ENV.vipChat, png, M.v1pSignal(row, entry, stop, tSig + DAY));

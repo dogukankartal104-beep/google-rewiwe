@@ -48,3 +48,18 @@ test('VIP welcome DM: first steps, the risk rules and the commands, in English a
   assert.match(tr, /bildirimlerini aç/); assert.match(tr, /Yatırım tavsiyesi değildir/);
   assert.ok(!/guarantee|we make you|profit guaranteed/i.test(en));
 });
+
+import * as MM from '../src/messages.js';
+test('best-of-week and pinned posts: no system details, no guarantees', () => {
+  const b = MM.v1kBestWeek({ sym: 'AKE', net: 12.3 }, '3 Nov – 9 Nov');
+  assert.match(b.text, /BEST CLOSED TRADE/); assert.match(b.text, /\+12\.3%/); assert.match(b.text, /stop/);
+  for (const t of [b.text, MM.pinnedFree().text, MM.pinnedVip().text]) {
+    assert.ok(!/open interest|\bOI\b|50%|15m|guarantee/i.test(t), t);
+  }
+  assert.match(MM.pinnedVip().text, /1x only, max 5%/);
+});
+test('weekStats carries what the best-of-week card needs', () => {
+  const rows = [{ symbol: 'AKEUSDT', sig_at: new Date(5e11).toISOString(), features: { pub: { vip_at: 1 }, px: 2 }, variants: { K1: { state: 'closed', net: 7, te: 123 } } }];
+  const st = weekStats(rows, 0, 1e13);
+  assert.equal(st.best.px, 2); assert.equal(st.best.te, 123); assert.equal(st.best.symbol, 'AKEUSDT');
+});

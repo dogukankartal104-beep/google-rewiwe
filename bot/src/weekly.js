@@ -4,7 +4,7 @@ import { ENV } from './config.js';
 import * as db from './db.js';
 import * as tg from './telegram.js';
 import * as M from './messages.js';
-import { weekResultsPng } from './chart.js';
+import { weekResultsPng, profitChartPng } from './chart.js';
 import { shadowRows } from './shadow.js';
 import { weekKey } from './publisher.js';
 import { trDate, trDayStart, trShort, log, warn } from './util.js';
@@ -14,7 +14,7 @@ export function weekStats(rows, from, to) {
   const items = rows
     .filter((r) => r.features?.pub?.vip_at && Date.parse(r.sig_at) >= from && Date.parse(r.sig_at) < to)
     .sort((a, b) => Date.parse(a.sig_at) - Date.parse(b.sig_at))
-    .map((r) => ({ sym: r.symbol.replace(/USDT$/, ''), net: r.variants?.K1?.state === 'closed' ? r.variants.K1.net : null }));
+    .map((r) => ({ sym: r.symbol.replace(/USDT$/, ''), symbol: r.symbol, px: r.features?.px ?? null, te: r.variants?.K1?.te ?? null, net: r.variants?.K1?.state === 'closed' ? r.variants.K1.net : null }));
   const closed = items.filter((x) => x.net !== null);
   const sum = closed.reduce((a, x) => a + x.net, 0);
   const byNet = [...closed].sort((a, b) => a.net - b.net);
@@ -51,4 +51,32 @@ export async function publishV1kWeekly() {
       log(`free weekly v1k preview posted (${key})`);
     } catch (e) { warn('free weekly v1k:', e.message); }
   }
+  // free: the best closed trade of the week (only when there was a winner)
+  const b = st.best;
+  if (ENV.postFree && ENV.freeChat && b && b.net > 0 && b.px && !(await db.postExists('v1kbest', 'free', key))) {
+    try {
+      const m = M.v1kBestWeek(b, label);
+      const png = await profitChartPng({ symbol: b.symbol, tf: '15m', dir: 'S', entry: b.px, now: b.px * (1 - b.net / 100), nowLabel: 'EXIT', profitText: `+${b.net.toFixed(1)}%`, small: 'SHORT · BEST OF THE WEEK', endTime: b.te, foot: 'Closed trade. Not financial advice.' });
+      const msg = await tg.sendCard(ENV.freeChat, png, m.text, { reply_markup: m.reply_markup });
+      if (!kuru(msg)) await db.postOnce('v1kbest', 'free', key, msg?.message_id ?? null);
+      log(`free best-of-week posted (${key}): ${b.symbol}`);
+    } catch (e) { warn('free best-of-week:', e.message); }
+  }
+}
+
+/* Pinned "how it works" posts, once per version (bump PIN_V to re-post). No system details: only what members get. */
+const PIN_V = 'v1';
+let pinsDone = false;
+export async function publishPinned() {
+  if (pinsDone) return;
+  const jobs = [['free', ENV.postFree && ENV.freeChat, () => M.pinnedFree()], ['vip', ENV.postVip && ENV.vipChat, () => M.pinnedVip()]];
+  for (const [ch, chat, build] of jobs) {
+    if (!chat || (await db.postExists('pinned', ch, PIN_V))) continue;
+    try {
+      const m = build();
+      const msg = await tg.send(chat, m.text, m.reply_markup ? { reply_markup: m.reply_markup } : {});
+      if (msg && !msg.dry) { await db.postOnce('pinned', ch, PIN_V, msg.message_id ?? null); if (msg.message_id) await tg.pin(chat, msg.message_id); log(`pinned post (${ch}) published`); }
+    } catch (e) { warn('pinned ' + ch + ':', e.message); }
+  }
+  pinsDone = true;
 }

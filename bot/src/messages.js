@@ -883,6 +883,49 @@ export function v1kWeekFree(symbols) {
 }
 
 
+export function v1kBestWeek(b, label) {
+  return {
+    text: [
+      `🏆 <b>BEST CLOSED TRADE OF THE WEEK</b> · ${label}`, '',
+      `🔻 <b>${esc(b.sym)}</b> · SHORT`,
+      `Closed after 24 hours: <b>+${fmt(b.net, 1)}%</b> of the position (after fees and funding).`, '',
+      'VIP members got this signal live, with entry, stop and exit time. Every result, wins and losses, is posted in VIP.', '',
+      `<i>The best closed trade of the week, not the average. Any trade can hit its stop.</i>`,
+      `<i>${RISK}</i>`,
+    ].join('\n'),
+    reply_markup: vipBtn('week'),
+  };
+}
+export function pinnedFree() {
+  return {
+    text: [
+      '📌 <b>START HERE</b>', '',
+      'This channel is our shop window: news that matters and closed trades from VIP.', '',
+      '<b>What VIP members get</b>',
+      '• Every signal the moment it fires: entry, stop and exit time, with a chart',
+      '• Every result posted, wins and losses',
+      '• A weekly results card', '',
+      'Most days there are zero or few signals. That is on purpose.', '',
+      `<i>${RISK}</i>`,
+    ].join('\n'),
+    reply_markup: vipBtn('pinned'),
+  };
+}
+export function pinnedVip() {
+  return {
+    text: [
+      '📌 <b>HOW TO USE THESE SIGNALS</b>', '',
+      '• Each signal shows <b>entry, stop and exit time</b>. Use all three.',
+      '• Size small: <b>1x only, max 5%</b> of your account per trade.',
+      '• The stop is part of the trade. Any trade can hit it.',
+      '• Every result is posted here as a reply to its signal, wins and losses.',
+      '• A weekly results card comes every Monday.', '',
+      'Quiet days are normal. We post only when a setup passes our filters.', '',
+      `<i>${RISK}</i>`,
+    ].join('\n'),
+  };
+}
+
 /* v1p: the same idea as v1k, but the entry waits for a pullback from the high (the signal says "enter now"). */
 export function v1pSignal(row, entry, stop, exitAt) {
   const f = row.features || {};

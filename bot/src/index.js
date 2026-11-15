@@ -8,7 +8,7 @@ import { warmup, scanOnce, MARKET } from './scanner.js';
 import { resolveOpen, resolveShadows } from './tracker.js';
 import { shadowTick } from './shadow.js';
 import { shadow2Tick } from './shadow2.js';
-import { publishV1kWeekly } from './weekly.js';
+import { publishV1kWeekly, publishPinned } from './weekly.js';
 import {
   publishSignal, publishResult, publishPendingFree,
   publishDaily, publishDailyRecap, publishWeekly, publishMonthly,
@@ -78,6 +78,8 @@ async function schedule() {
   lastSched = stamp;
 
   try {
+    await publishPinned();
+
     // günlük analiz
     if (h === ENV.dailyHour && mi < 5) await publishDaily();
 
