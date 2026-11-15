@@ -113,8 +113,8 @@ export const ENV = {
   newsBreakingMin: Number(str('NEWS_BREAKING_MINUTES', '90')), // a flash story must be younger than this
   newsTagCooldownH: Number(str('NEWS_TAG_COOLDOWN_H', '6')),   // same topic (e.g. SECURITY) at most once per this many hours
   // The free channel gets far less: only big stories, one a day at most, and later than VIP
-  newsFreeMinScore: Number(str('NEWS_FREE_MIN_SCORE', '38')),
-  newsFreeMaxPerDay: Number(str('NEWS_FREE_MAX_PER_DAY', '4')),
+  newsFreeMinScore: Number(str('NEWS_FREE_MIN_SCORE', '45')),
+  newsFreeMaxPerDay: Number(str('NEWS_FREE_MAX_PER_DAY', '2')),
   newsFreeGapMin: Number(str('NEWS_FREE_GAP_MIN', '90')),      // minutes between two free news posts
   newsDigestOn: bool('NEWS_DIGEST', false),                     // the evening digest is off: free gets up to 4 stories, VIP 1
   newsFreeDelayMin: Number(str('NEWS_FREE_DELAY_MIN', '20')),

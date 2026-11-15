@@ -213,11 +213,11 @@ test('the scanner really passes the macro window to the decision engine (it was 
 });
 
 /* ======================= SETTINGS ARE SANE ======================= */
-test('news volume: free gets up to four stories a day, VIP one very important story', () => {
-  assert.equal(ENV.newsFreeMaxPerDay, 4);
+test('news volume: free gets up to two stories a day, VIP one very important story', () => {
+  assert.equal(ENV.newsFreeMaxPerDay, 2);
   assert.equal(ENV.newsMaxPerDay, 1);
   assert.ok(ENV.newsMinScore >= 70, 'VIP only gets what is very important');
-  assert.ok(ENV.newsFreeMinScore < ENV.newsMinScore, 'free has the lower bar so it can fill four slots');
+  assert.ok(ENV.newsFreeMinScore < ENV.newsMinScore, 'free has the lower bar so it can fill its slots');
   assert.ok(ENV.newsFreeGapMin >= 60, 'free stories are spaced out');
   assert.equal(ENV.newsDigestOn, false, 'the evening digest is off so free is not flooded');
   assert.ok(ENV.newsBreakingMin <= 120, 'breaking means recent');

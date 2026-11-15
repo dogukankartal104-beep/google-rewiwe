@@ -276,3 +276,8 @@ test('Türkçe karakterle başlayan terimler eşleşir (regresyon)', () => {
     assert.ok(scoreItem(t).tags.includes(tag), `"${t}" -> ${tag} bekleniyordu`);
   }
 });
+
+test('a headline with no crypto angle is not flash news (AI-company lawsuit)', () => {
+  assert.ok(scoreItem('OpenAI, Anthropic, Google and Other AI Giants Face Lawsuit Demanding Damages').score < 38);
+  assert.ok(scoreItem('Bitcoin ETF lawsuit filed against SEC').score >= 38);
+});

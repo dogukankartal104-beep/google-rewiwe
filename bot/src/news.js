@@ -142,6 +142,7 @@ export const WHAT = {
   MARKET: ['After a sharp move the market is stretched and can either continue on momentum or snap back.', 'The next few hours usually show which one is happening.'],
 };
 
+const CRYPTO = /(bitcoin|btc|ethereum|\beth\b|crypto|kripto|token|coin|blockchain|defi|\bnft|stablecoin|usdt|usdc|tether|binance|coinbase|okx|bybit|kraken|upbit|solana|\bxrp|ripple|dogecoin|\bdex\b|\bcex\b|exchange|borsa|wallet|cüzdan|miner|madenci|\betf\b|satoshi|altcoin|airdrop|halving|on-chain|onchain|\bsec\b|cftc|fed\b|fomc|powell|cpi\b)/i;
 const BIG = /\b(bitcoin|btc|ethereum|eth|binance|coinbase|tether|usdt|solana|xrp)\b/i;
 
 export function scoreItem(title, { lang = 'tr' } = {}) {
@@ -157,6 +158,8 @@ export function scoreItem(title, { lang = 'tr' } = {}) {
     }
   }
   if (score && BIG.test(t)) score += 10;      // büyük isim geçiyorsa daha çok ilgi görür
+  // A headline with no crypto angle at all (e.g. an AI-company lawsuit) is not market news, however loud its keywords.
+  if (score && !CRYPTO.test(t) && !tags.some((x) => x === 'MACRO' || x === 'LIQUIDATION' || x === 'INSOLVENCY' || x === 'SECURITY')) score = Math.min(score, 15);
   return { score, tags, why, tip: TIPS[tags[0]] || null, what: WHAT[tags[0]] || null };
 }
 
